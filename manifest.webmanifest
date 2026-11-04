@@ -1,0 +1,13 @@
+{
+  "name": "Medical PG e-Logbook (NMC)",
+  "short_name": "PG e-Logbook",
+  "description": "Offline e-logbook for MD/MS postgraduate students in India, following NMC PGMER-2023.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f7fa",
+  "theme_color": "#0f5f8c",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

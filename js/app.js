@@ -1,0 +1,861 @@
+/* Medical PG e-Logbook — offline single-page app (vanilla JS, data kept on device). */
+(function () {
+  'use strict';
+  const D = window.PGDATA;
+  const STORE_KEY = 'pgElogbook.v1';
+  const $ = (s, el = document) => el.querySelector(s);
+
+  // ---------- Storage ----------
+  function blankDB() {
+    return {
+      version: 1,
+      profile: {},
+      thesis: {},
+      targets: JSON.parse(JSON.stringify(D.DEFAULT_TARGETS)),
+      customProcedures: [],
+      c: {} // collections
+    };
+  }
+  let db = load();
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORE_KEY);
+      if (!raw) return blankDB();
+      const d = JSON.parse(raw);
+      const b = blankDB();
+      return Object.assign(b, d, { targets: Object.assign(b.targets, d.targets || {}), c: d.c || {} });
+    } catch (e) {
+      console.error(e);
+      return blankDB();
+    }
+  }
+  function save() {
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify(db));
+    } catch (e) {
+      alert('Could not save — device storage may be full. Please export a backup.');
+    }
+  }
+  const list = (k) => (db.c[k] = db.c[k] || []);
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+  // ---------- Helpers ----------
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const today = () => new Date().toISOString().slice(0, 10);
+  function fmtDate(s) {
+    if (!s) return '';
+    const [y, m, d] = s.split('-');
+    return d && m && y ? `${d}-${m}-${y}` : s;
+  }
+  function addMonths(iso, n) {
+    if (!iso) return '';
+    const d = new Date(iso + 'T00:00:00');
+    d.setMonth(d.getMonth() + n);
+    return d.toISOString().slice(0, 10);
+  }
+  function daysBetween(a, b) {
+    if (!a || !b) return 0;
+    return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000) + 1;
+  }
+  const specialty = () => db.profile.specialty || '';
+  function procedureOptions() {
+    const base = D.PROCEDURES[specialty()] || D.GENERIC;
+    return [...new Set([...base, ...(db.customProcedures || [])])];
+  }
+
+  // ---------- Schemas ----------
+  const opt = (arr) => arr.map((x) => (typeof x === 'string' ? { v: x, l: x } : x));
+  const S = {
+    cases: {
+      title: 'Clinical Cases', icon: '🩺', group: 'Clinical',
+      help: 'Record every case you clerk, present or manage. Use only hospital IDs (UHID/IP no.) — never patient names (DPDP Act 2023).',
+      fields: [
+        { n: 'date', l: 'Date', t: 'date', req: 1 },
+        { n: 'setting', l: 'Setting', t: 'select', o: opt(['OPD', 'IPD / Ward', 'Emergency / Casualty', 'ICU / HDU', 'Operation Theatre', 'Labour Room', 'Laboratory', 'Field / Community', 'DRP – District Hospital']) },
+        { n: 'pid', l: 'UHID / IP No.', t: 'text' },
+        { n: 'age', l: 'Age', t: 'text' },
+        { n: 'sex', l: 'Sex', t: 'select', o: opt(['M', 'F', 'Other']) },
+        { n: 'diagnosis', l: 'Diagnosis', t: 'text', req: 1 },
+        { n: 'role', l: 'My role', t: 'select', o: opt(['Clerked & presented', 'Managed (primary)', 'Assisted management', 'Observed']) },
+        { n: 'competency', l: 'Competency / curriculum code', t: 'text', ph: 'optional, e.g. SO1.3' },
+        { n: 'learning', l: 'Management / learning points', t: 'textarea' }
+      ],
+      cols: ['date', 'setting', 'pid', 'diagnosis', 'role']
+    },
+    procedures: {
+      title: 'Procedures & Skills', icon: '💉', group: 'Clinical',
+      help: 'Level of participation per NMC curriculum: O (observed) → A (assisted) → PS (performed under supervision) → PI (performed independently).',
+      fields: [
+        { n: 'date', l: 'Date', t: 'date', req: 1 },
+        { n: 'procedure', l: 'Procedure / skill', t: 'combo', req: 1, src: procedureOptions },
+        { n: 'level', l: 'Level of participation', t: 'select', o: D.PARTICIPATION, req: 1 },
+        { n: 'pid', l: 'UHID / IP No.', t: 'text' },
+        { n: 'indication', l: 'Indication / diagnosis', t: 'text' },
+        { n: 'outcome', l: 'Outcome / complications', t: 'text' },
+        { n: 'supervisor', l: 'Supervising faculty', t: 'text' }
+      ],
+      cols: ['date', 'procedure', 'level', 'indication', 'supervisor']
+    },
+    academics: {
+      title: 'Academic Activities', icon: '📚', group: 'Academic',
+      help: 'Seminars, journal clubs, case presentations, clinical meetings and UG teaching — the departmental learning activities NMC expects to be logged.',
+      fields: [
+        { n: 'date', l: 'Date', t: 'date', req: 1 },
+        { n: 'type', l: 'Activity', t: 'select', req: 1, o: opt(['Seminar', 'Journal Club', 'Case Presentation', 'Clinical / Grand Round', 'Inter-departmental Meeting', 'Clinico-Pathological Conference (CPC)', 'Mortality & Morbidity Meeting', 'UG Teaching (taken by me)', 'Departmental Lecture (attended)', 'Skills Lab Session', 'Other']) },
+        { n: 'topic', l: 'Topic', t: 'text', req: 1 },
+        { n: 'role', l: 'My role', t: 'select', o: opt(['Presenter', 'Teacher', 'Moderator', 'Attendee']) },
+        { n: 'moderator', l: 'Moderator / faculty', t: 'text' },
+        { n: 'notes', l: 'Notes / feedback received', t: 'textarea' }
+      ],
+      cols: ['date', 'type', 'topic', 'role', 'moderator']
+    },
+    presentations: {
+      title: 'Paper & Poster Presentations', icon: '🎤', group: 'Research',
+      help: 'PGMER-2023: present at least one poster and one oral paper at a conference during the course.',
+      fields: [
+        { n: 'date', l: 'Date', t: 'date', req: 1 },
+        { n: 'type', l: 'Type', t: 'select', req: 1, o: opt(['Poster', 'Oral paper', 'E-poster', 'Invited talk', 'Quiz / Competition']) },
+        { n: 'title', l: 'Title', t: 'text', req: 1 },
+        { n: 'event', l: 'Conference / event', t: 'text', req: 1 },
+        { n: 'level', l: 'Level', t: 'select', o: opt(['Institutional', 'State', 'Zonal', 'National', 'International']) },
+        { n: 'place', l: 'Venue', t: 'text' },
+        { n: 'award', l: 'Award (if any)', t: 'text' }
+      ],
+      cols: ['date', 'type', 'title', 'event', 'level']
+    },
+    publications: {
+      title: 'Publications', icon: '📄', group: 'Research',
+      help: 'PGMER-2023: at least one research paper published or accepted in an indexed journal.',
+      fields: [
+        { n: 'title', l: 'Title', t: 'text', req: 1 },
+        { n: 'journal', l: 'Journal', t: 'text', req: 1 },
+        { n: 'authorship', l: 'Authorship', t: 'select', o: opt(['First author', 'Corresponding author', 'Co-author']) },
+        { n: 'status', l: 'Status', t: 'select', req: 1, o: opt(['Submitted', 'Under review', 'Accepted', 'Published']) },
+        { n: 'date', l: 'Date (accepted / published)', t: 'date' },
+        { n: 'indexing', l: 'Indexing', t: 'select', o: opt(['PubMed / MEDLINE', 'Scopus', 'Web of Science', 'DOAJ', 'Embase', 'Index Copernicus', 'Other']) },
+        { n: 'doi', l: 'DOI / link', t: 'text' }
+      ],
+      cols: ['date', 'title', 'journal', 'status', 'indexing']
+    },
+    conferences: {
+      title: 'Conferences / CMEs / Workshops', icon: '🏛️', group: 'Research',
+      help: 'External and outreach learning activities attended.',
+      fields: [
+        { n: 'date', l: 'Date', t: 'date', req: 1 },
+        { n: 'name', l: 'Name of event', t: 'text', req: 1 },
+        { n: 'type', l: 'Type', t: 'select', o: opt(['Conference', 'CME', 'Workshop', 'Hands-on course', 'Webinar']) },
+        { n: 'organiser', l: 'Organiser / venue', t: 'text' },
+        { n: 'credits', l: 'Credit hours', t: 'text' }
+      ],
+      cols: ['date', 'name', 'type', 'organiser', 'credits']
+    },
+    wpba: {
+      title: 'Workplace-Based Assessments', icon: '📝', group: 'Assessment',
+      help: 'Formative assessments: Mini-CEX, DOPS, Case-based Discussion, Multi-source feedback (360°), and internal exams.',
+      fields: [
+        { n: 'date', l: 'Date', t: 'date', req: 1 },
+        { n: 'tool', l: 'Assessment tool', t: 'select', req: 1, o: opt(['Mini-CEX', 'DOPS', 'Case-based Discussion (CbD)', 'Multi-source Feedback (360°)', 'OSCE / OSPE', 'Internal Theory Exam', 'Internal Practical / Clinical Exam', 'Viva', 'Other']) },
+        { n: 'topic', l: 'Case / skill / topic', t: 'text', req: 1 },
+        { n: 'assessor', l: 'Assessor', t: 'text' },
+        { n: 'score', l: 'Score / grade', t: 'text' },
+        { n: 'feedback', l: 'Feedback', t: 'textarea' },
+        { n: 'plan', l: 'Action plan', t: 'textarea' }
+      ],
+      cols: ['date', 'tool', 'topic', 'assessor', 'score']
+    },
+    appraisals: {
+      title: 'Periodic Appraisal (NMC form)', icon: '⭐', group: 'Assessment',
+      help: 'NMC Student Appraisal Form: each element scored 1–9 (1–3 less than satisfactory, 4–6 satisfactory, 7–9 more than satisfactory). Usually done every 3–6 months by the guide/HOD.',
+      fields: [
+        { n: 'date', l: 'Date', t: 'date', req: 1 },
+        { n: 'period', l: 'Period', t: 'text', req: 1, ph: 'e.g. Semester 1 / Months 1–6' },
+        ...D.APPRAISAL_ITEMS.map(([n, l]) => ({ n, l, t: 'number', min: 1, max: 9 })),
+        { n: 'pubs', l: 'Publications', t: 'select', o: opt(['No', 'Yes']) },
+        { n: 'remarks', l: 'Remarks / suggestions', t: 'textarea' },
+        { n: 'assessor', l: 'Assessed by', t: 'text' }
+      ],
+      cols: ['date', 'period', 'avg', 'assessor']
+    },
+    postings: {
+      title: 'Postings & DRP', icon: '🏥', group: 'Training',
+      help: 'Parent department units, rotational/elective postings and the mandatory 3-month District Residency Programme (DRP).',
+      fields: [
+        { n: 'from', l: 'From', t: 'date', req: 1 },
+        { n: 'to', l: 'To', t: 'date', req: 1 },
+        { n: 'type', l: 'Posting type', t: 'select', req: 1, o: opt(['Parent department', 'Rotational posting', 'District Residency Programme (DRP)', 'Elective', 'Other']) },
+        { n: 'dept', l: 'Department / unit / hospital', t: 'text', req: 1 },
+        { n: 'remarks', l: 'Work done / remarks', t: 'textarea' }
+      ],
+      cols: ['from', 'to', 'type', 'dept', 'days']
+    },
+    leave: {
+      title: 'Leave Record', icon: '🗓️', group: 'Training',
+      help: 'Leave taken. Attendance below the minimum (80%) can affect eligibility for the university exam.',
+      fields: [
+        { n: 'from', l: 'From', t: 'date', req: 1 },
+        { n: 'to', l: 'To', t: 'date', req: 1 },
+        { n: 'type', l: 'Type', t: 'select', o: opt(['Casual leave', 'Earned leave', 'Medical leave', 'Maternity leave', 'Paternity leave', 'Academic leave', 'Other']) },
+        { n: 'remarks', l: 'Remarks', t: 'text' }
+      ],
+      cols: ['from', 'to', 'type', 'days', 'remarks']
+    },
+    courses: {
+      title: 'Courses & Certifications', icon: '🎓', group: 'Training',
+      help: 'Mandatory and recommended courses (BCBR, BLS/ACLS, ethics, etc.).',
+      fields: [
+        { n: 'course', l: 'Course', t: 'combo', req: 1, src: () => D.MANDATORY_COURSES.map((c) => c.name) },
+        { n: 'date', l: 'Date completed', t: 'date' },
+        { n: 'provider', l: 'Provider', t: 'text' },
+        { n: 'cert', l: 'Certificate no.', t: 'text' }
+      ],
+      cols: ['date', 'course', 'provider', 'cert']
+    },
+    mentor: {
+      title: 'Mentor Meetings', icon: '🤝', group: 'Reflection',
+      help: 'Mentor–mentee meetings and documented feedback.',
+      fields: [
+        { n: 'date', l: 'Date', t: 'date', req: 1 },
+        { n: 'mentor', l: 'Mentor', t: 'text' },
+        { n: 'discussion', l: 'Points discussed', t: 'textarea', req: 1 },
+        { n: 'actions', l: 'Action points', t: 'textarea' }
+      ],
+      cols: ['date', 'mentor', 'discussion']
+    },
+    reflections: {
+      title: 'Reflections', icon: '💭', group: 'Reflection',
+      help: 'Reflective writing on critical incidents, ethics, communication and professionalism.',
+      fields: [
+        { n: 'date', l: 'Date', t: 'date', req: 1 },
+        { n: 'title', l: 'Title', t: 'text', req: 1 },
+        { n: 'what', l: 'What happened?', t: 'textarea' },
+        { n: 'learning', l: 'What did I learn / what will I do differently?', t: 'textarea' }
+      ],
+      cols: ['date', 'title']
+    }
+  };
+
+  const THESIS_FIELDS = [
+    { n: 'title', l: 'Thesis title', t: 'textarea' },
+    { n: 'guide', l: 'Guide', t: 'text' },
+    { n: 'coguide', l: 'Co-guide(s)', t: 'text' },
+    { n: 'design', l: 'Study design', t: 'text' },
+    { n: 'protocolDate', l: 'Protocol submitted to institution', t: 'date' },
+    { n: 'iecNo', l: 'Institutional Ethics Committee approval no.', t: 'text' },
+    { n: 'iecDate', l: 'IEC approval date', t: 'date' },
+    { n: 'univDate', l: 'Protocol approved by university', t: 'date' },
+    { n: 'ctri', l: 'CTRI registration no. (if applicable)', t: 'text' },
+    { n: 'dataStart', l: 'Data collection started', t: 'date' },
+    { n: 'dataEnd', l: 'Data collection completed', t: 'date' },
+    { n: 'submitted', l: 'Thesis submitted to university', t: 'date' },
+    { n: 'accepted', l: 'Thesis accepted', t: 'date' },
+    { n: 'notes', l: 'Progress notes', t: 'textarea' }
+  ];
+
+  const PROFILE_FIELDS = [
+    { n: 'name', l: 'Full name', t: 'text', req: 1 },
+    { n: 'degree', l: 'Degree', t: 'select', o: opt(['MD', 'MS', 'Diploma', 'DNB', 'DM', 'MCh']) },
+    { n: 'specialty', l: 'Specialty', t: 'combo', src: () => [...D.SPECIALTIES.MD, ...D.SPECIALTIES.MS, ...D.SPECIALTIES.Diploma] },
+    { n: 'regNo', l: 'Medical council registration no.', t: 'text' },
+    { n: 'univRegNo', l: 'University registration / enrolment no.', t: 'text' },
+    { n: 'college', l: 'Medical college / institution', t: 'text' },
+    { n: 'university', l: 'University', t: 'text' },
+    { n: 'joinDate', l: 'Date of joining the course', t: 'date' },
+    { n: 'batch', l: 'Academic batch / session', t: 'text', ph: 'e.g. 2025–2028' },
+    { n: 'guide', l: 'Guide', t: 'text' },
+    { n: 'hod', l: 'Head of Department', t: 'text' },
+    { n: 'mentor', l: 'Mentor', t: 'text' },
+    { n: 'phone', l: 'Phone', t: 'text' },
+    { n: 'email', l: 'Email', t: 'text' }
+  ];
+
+  // ---------- Derived values ----------
+  function derived(key, r, col) {
+    if (col === 'days') return daysBetween(r.from, r.to) || '';
+    if (col === 'avg') return appraisalAvg(r);
+    return r[col];
+  }
+  function appraisalAvg(r) {
+    const v = D.APPRAISAL_ITEMS.map(([n]) => Number(r[n])).filter((x) => x > 0);
+    return v.length ? (v.reduce((a, b) => a + b, 0) / v.length).toFixed(1) : '';
+  }
+  function cellValue(key, r, col) {
+    const f = (S[key].fields.find((x) => x.n === col) || {});
+    const v = derived(key, r, col);
+    if (f.t === 'date') return fmtDate(v);
+    if (col === 'avg') return v ? `${v} / 9` : '';
+    if (col === 'days') return v ? `${v} d` : '';
+    return v;
+  }
+  function colLabel(key, col) {
+    if (col === 'days') return 'Days';
+    if (col === 'avg') return 'Avg score';
+    const f = S[key].fields.find((x) => x.n === col);
+    return f ? f.l : col;
+  }
+  const sortKey = (r) => r.date || r.from || '';
+
+  // ---------- Router ----------
+  const NAV = [
+    ['dashboard', '🏠', 'Dashboard'],
+    ['profile', '👤', 'Profile'],
+    ...['cases', 'procedures', 'academics'].map((k) => ['c/' + k, S[k].icon, S[k].title]),
+    ['thesis', '🔬', 'Thesis'],
+    ...['presentations', 'publications', 'conferences', 'wpba', 'appraisals', 'postings', 'leave', 'courses', 'mentor', 'reflections'].map((k) => ['c/' + k, S[k].icon, S[k].title]),
+    ['report', '🖨️', 'Print Logbook'],
+    ['settings', '⚙️', 'Targets & Backup'],
+    ['rules', '📜', 'NMC Rules']
+  ];
+
+  function renderNav() {
+    const cur = location.hash.replace(/^#\/?/, '') || 'dashboard';
+    $('#nav').innerHTML = NAV.map(([r, i, l]) => {
+      const n = r.startsWith('c/') ? list(r.slice(2)).length : '';
+      return `<a href="#/${r}" class="${cur === r ? 'active' : ''}"><span class="ni">${i}</span><span>${esc(l)}</span>${n !== '' ? `<span class="badge">${n}</span>` : ''}</a>`;
+    }).join('');
+  }
+
+  function route() {
+    const h = location.hash.replace(/^#\/?/, '') || 'dashboard';
+    const main = $('#main');
+    document.body.classList.remove('nav-open');
+    if (h.startsWith('c/') && S[h.slice(2)]) renderCollection(h.slice(2));
+    else if (h === 'profile') renderSingle('profile', 'Student Profile', PROFILE_FIELDS, 'These details appear on the cover page of your printed logbook.');
+    else if (h === 'thesis') renderSingle('thesis', 'Thesis / Dissertation', THESIS_FIELDS, thesisHelp());
+    else if (h === 'report') renderReport();
+    else if (h === 'settings') renderSettings();
+    else if (h === 'rules') renderRules();
+    else renderDashboard();
+    renderNav();
+    main.focus({ preventScroll: true });
+    window.scrollTo(0, 0);
+  }
+
+  // ---------- Form building ----------
+  function inputHTML(f, val, idp = 'f_') {
+    const id = idp + f.n;
+    const req = f.req ? 'required' : '';
+    const v = esc(val == null ? '' : val);
+    const ph = f.ph ? `placeholder="${esc(f.ph)}"` : '';
+    let control;
+    if (f.t === 'textarea') control = `<textarea id="${id}" name="${f.n}" rows="3" ${req} ${ph}>${v}</textarea>`;
+    else if (f.t === 'select') control = `<select id="${id}" name="${f.n}" ${req}><option value="">— select —</option>${f.o.map((o) => `<option value="${esc(o.v)}" ${String(val) === o.v ? 'selected' : ''}>${esc(o.l)}</option>`).join('')}</select>`;
+    else if (f.t === 'combo') control = `<input id="${id}" name="${f.n}" list="${id}_dl" value="${v}" ${req} ${ph} autocomplete="off"><datalist id="${id}_dl">${f.src().map((o) => `<option value="${esc(o)}">`).join('')}</datalist>`;
+    else if (f.t === 'number') control = `<input id="${id}" name="${f.n}" type="number" inputmode="numeric" ${f.min != null ? `min="${f.min}"` : ''} ${f.max != null ? `max="${f.max}"` : ''} value="${v}" ${req}>`;
+    else control = `<input id="${id}" name="${f.n}" type="${f.t}" value="${v}" ${req} ${ph}>`;
+    return `<label class="field ${f.t === 'textarea' ? 'wide' : ''}" for="${id}"><span>${esc(f.l)}${f.req ? ' <b class="req">*</b>' : ''}</span>${control}</label>`;
+  }
+  function readForm(form, fields) {
+    const o = {};
+    fields.forEach((f) => {
+      const el = form.elements[f.n];
+      if (el) o[f.n] = el.value.trim();
+    });
+    return o;
+  }
+
+  // ---------- Single-record pages (profile, thesis) ----------
+  function renderSingle(key, title, fields, help) {
+    const rec = db[key] || {};
+    $('#main').innerHTML = `
+      <h1>${esc(title)}</h1>
+      <p class="help">${help}</p>
+      <form id="sf" class="card form-grid">
+        ${fields.map((f) => inputHTML(f, rec[f.n])).join('')}
+        <div class="actions wide"><button class="btn primary" type="submit">Save</button></div>
+      </form>`;
+    $('#sf').addEventListener('submit', (e) => {
+      e.preventDefault();
+      db[key] = Object.assign({}, db[key], readForm(e.target, fields));
+      save();
+      toast('Saved');
+      renderNav();
+      if (key === 'thesis') renderSingle(key, title, fields, thesisHelp());
+    });
+  }
+  function thesisHelp() {
+    const j = db.profile.joinDate;
+    const t = db.targets;
+    let s = 'Thesis is mandatory for MD/MS (PGMER-2023). Submit the protocol early, obtain IEC approval before starting data collection, and submit the thesis to the university before the final exam deadline.';
+    if (j) s += ` <br><b>Based on your joining date:</b> protocol due by <b>${fmtDate(addMonths(j, t.thesisProtocolMonths))}</b>, thesis submission due by <b>${fmtDate(addMonths(j, t.thesisSubmitMonths))}</b> (adjust in Targets if your university differs).`;
+    else s += ' <br>Add your joining date in Profile to see due dates.';
+    return s;
+  }
+
+  // ---------- Collections ----------
+  const state = { filter: '', status: '' };
+  function renderCollection(key) {
+    const sc = S[key];
+    const rows = list(key).slice().sort((a, b) => sortKey(b).localeCompare(sortKey(a)));
+    const q = state.filter.toLowerCase();
+    const shown = rows.filter((r) => (!state.status || r.status === state.status) &&
+      (!q || Object.values(r).some((v) => String(v).toLowerCase().includes(q))));
+    const pending = rows.filter((r) => r.status !== 'Verified').length;
+    const extra = key === 'courses' ? courseChecklist() : key === 'procedures' ? procedureSummary() : '';
+    $('#main').innerHTML = `
+      <div class="head-row">
+        <h1>${sc.icon} ${esc(sc.title)}</h1>
+        <div class="head-actions">
+          <button class="btn primary" id="addBtn">+ Add entry</button>
+        </div>
+      </div>
+      <p class="help">${esc(sc.help)}</p>
+      ${extra}
+      <div class="toolbar">
+        <input id="q" type="search" placeholder="Search…" value="${esc(state.filter)}" aria-label="Search entries">
+        <select id="st" aria-label="Filter by status">
+          <option value="">All (${rows.length})</option>
+          <option value="Pending" ${state.status === 'Pending' ? 'selected' : ''}>Pending (${pending})</option>
+          <option value="Verified" ${state.status === 'Verified' ? 'selected' : ''}>Verified (${rows.length - pending})</option>
+        </select>
+        <button class="btn" id="verifyAll" ${pending ? '' : 'disabled'}>Verify pending…</button>
+        <button class="btn" id="csv" ${rows.length ? '' : 'disabled'}>Export CSV</button>
+      </div>
+      ${shown.length ? `
+      <div class="table-wrap"><table class="data">
+        <thead><tr>${sc.cols.map((c) => `<th>${esc(colLabel(key, c))}</th>`).join('')}<th>Status</th><th></th></tr></thead>
+        <tbody>${shown.map((r) => `
+          <tr data-id="${r.id}">
+            ${sc.cols.map((c) => `<td data-label="${esc(colLabel(key, c))}">${esc(cellValue(key, r, c))}</td>`).join('')}
+            <td data-label="Status">${statusPill(r)}</td>
+            <td class="row-actions">
+              <button class="btn sm" data-act="edit">Edit</button>
+              ${r.status === 'Verified' ? '' : '<button class="btn sm" data-act="verify">Verify</button>'}
+              <button class="btn sm danger" data-act="del" aria-label="Delete">✕</button>
+            </td>
+          </tr>`).join('')}
+        </tbody></table></div>` : `<div class="empty card">No entries yet. Tap <b>+ Add entry</b> to start.</div>`}`;
+
+    $('#addBtn').onclick = () => openEntry(key);
+    $('#q').oninput = (e) => { state.filter = e.target.value; renderCollection(key); const el = $('#q'); el.focus(); el.setSelectionRange(el.value.length, el.value.length); };
+    $('#st').onchange = (e) => { state.status = e.target.value; renderCollection(key); };
+    $('#csv').onclick = () => exportCSV(key);
+    $('#verifyAll').onclick = () => openVerify(key, rows.filter((r) => r.status !== 'Verified').map((r) => r.id));
+    $('#main').querySelectorAll('tr[data-id] button').forEach((b) => {
+      b.onclick = () => {
+        const id = b.closest('tr').dataset.id;
+        if (b.dataset.act === 'edit') openEntry(key, id);
+        else if (b.dataset.act === 'verify') openVerify(key, [id]);
+        else if (b.dataset.act === 'del' && confirm('Delete this entry permanently?')) {
+          db.c[key] = list(key).filter((r) => r.id !== id);
+          save();
+          renderCollection(key);
+          renderNav();
+        }
+      };
+    });
+  }
+  function statusPill(r) {
+    if (r.status === 'Verified') return `<span class="pill ok" title="${esc('Verified by ' + (r.verifiedBy || '') + ' on ' + fmtDate(r.verifiedOn))}">✓ Verified</span>`;
+    return '<span class="pill pend">Pending</span>';
+  }
+
+  function openEntry(key, id) {
+    const sc = S[key];
+    const rec = id ? list(key).find((r) => r.id === id) : {};
+    const defaults = {};
+    sc.fields.forEach((f) => { if (f.t === 'date' && f.req && !id) defaults[f.n] = today(); });
+    if (!id && key === 'mentor') defaults.mentor = db.profile.mentor || '';
+    const editingVerified = rec.status === 'Verified';
+    modal(`
+      <h2>${id ? 'Edit' : 'New'} — ${esc(sc.title)}</h2>
+      ${editingVerified ? '<p class="warn">This entry is verified. Saving changes will reset it to <b>Pending</b> for re-verification.</p>' : ''}
+      <form id="ef" class="form-grid">
+        ${sc.fields.map((f) => inputHTML(f, rec[f.n] != null ? rec[f.n] : defaults[f.n])).join('')}
+        <div class="actions wide">
+          <button type="button" class="btn" data-close>Cancel</button>
+          <button type="submit" class="btn primary">Save</button>
+        </div>
+      </form>`);
+    $('#ef').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const data = readForm(e.target, sc.fields);
+      if (data.from && data.to && data.to < data.from) return alert('"To" date cannot be before "From" date.');
+      if (key === 'procedures' && data.procedure && !procedureOptions().includes(data.procedure)) {
+        db.customProcedures.push(data.procedure);
+      }
+      if (id) {
+        const changed = sc.fields.some((f) => (rec[f.n] || '') !== (data[f.n] || ''));
+        Object.assign(rec, data, { updated: new Date().toISOString() });
+        if (changed && editingVerified) Object.assign(rec, { status: 'Pending', verifiedBy: '', verifiedOn: '', verifyRemark: '' });
+      } else {
+        list(key).push(Object.assign({ id: uid(), created: new Date().toISOString(), status: 'Pending' }, data));
+      }
+      save();
+      closeModal();
+      toast('Saved');
+      renderCollection(key);
+      renderNav();
+    });
+  }
+
+  function openVerify(key, ids) {
+    if (!ids.length) return;
+    modal(`
+      <h2>Faculty verification</h2>
+      <p class="help">To be completed by the supervising faculty / guide / HOD. ${ids.length} entr${ids.length > 1 ? 'ies' : 'y'} will be marked verified. The printed logbook still carries a signature column for physical counter-signing.</p>
+      <form id="vf" class="form-grid">
+        <label class="field"><span>Faculty name & designation <b class="req">*</b></span><input name="by" required value="${esc(db.lastVerifier || '')}"></label>
+        <label class="field"><span>Date <b class="req">*</b></span><input name="on" type="date" required value="${today()}"></label>
+        <label class="field wide"><span>Remarks</span><input name="remark"></label>
+        <label class="field wide check"><input type="checkbox" name="ok" required> <span>I have reviewed ${ids.length > 1 ? 'these entries' : 'this entry'} with the student.</span></label>
+        <div class="actions wide"><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Mark verified</button></div>
+      </form>`);
+    $('#vf').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const f = e.target.elements;
+      db.lastVerifier = f.by.value.trim();
+      list(key).forEach((r) => {
+        if (ids.includes(r.id)) Object.assign(r, { status: 'Verified', verifiedBy: f.by.value.trim(), verifiedOn: f.on.value, verifyRemark: f.remark.value.trim() });
+      });
+      save();
+      closeModal();
+      toast('Verified');
+      renderCollection(key);
+    });
+  }
+
+  function courseChecklist() {
+    const done = list('courses');
+    return `<div class="card checklist"><h3>Checklist</h3><ul>${D.MANDATORY_COURSES.map((c) => {
+      const r = done.find((x) => (x.course || '').toLowerCase() === c.name.toLowerCase());
+      return `<li class="${r ? 'done' : ''}"><span class="tick">${r ? '✓' : '○'}</span><div><b>${esc(c.name)}</b>${r && r.date ? ` — ${fmtDate(r.date)}` : ''}<br><small>${esc(c.note)}</small></div></li>`;
+    }).join('')}</ul></div>`;
+  }
+
+  function procedureCounts() {
+    const m = {};
+    list('procedures').forEach((r) => {
+      const p = r.procedure || '—';
+      m[p] = m[p] || { O: 0, A: 0, PS: 0, PI: 0, total: 0 };
+      if (m[p][r.level] != null) m[p][r.level]++;
+      m[p].total++;
+    });
+    return m;
+  }
+  function procedureSummary() {
+    const m = procedureCounts();
+    const tg = db.targets.procedures || {};
+    const names = [...new Set([...Object.keys(m), ...Object.keys(tg).filter((k) => tg[k] > 0)])].sort();
+    if (!names.length) return '';
+    return `<details class="card" open><summary><b>Summary by level of participation</b></summary>
+      <div class="table-wrap"><table class="data compact"><thead><tr><th>Procedure</th><th>O</th><th>A</th><th>PS</th><th>PI</th><th>Total</th><th>Target (PS+PI)</th></tr></thead>
+      <tbody>${names.map((n) => { const c = m[n] || { O: 0, A: 0, PS: 0, PI: 0, total: 0 }; const t = tg[n] || 0; const got = c.PS + c.PI;
+        return `<tr><td>${esc(n)}</td><td>${c.O}</td><td>${c.A}</td><td>${c.PS}</td><td>${c.PI}</td><td><b>${c.total}</b></td><td>${t ? `<span class="${got >= t ? 'okt' : 'badt'}">${got} / ${t}</span>` : '—'}</td></tr>`; }).join('')}
+      </tbody></table></div></details>`;
+  }
+
+  // ---------- Dashboard ----------
+  function attendance() {
+    const j = db.profile.joinDate;
+    if (!j) return null;
+    const t = db.targets;
+    const end = addMonths(j, t.courseMonths);
+    const upto = today() < end ? today() : end;
+    const total = daysBetween(j, upto);
+    if (total <= 0) return null;
+    const leaveDays = list('leave').filter((l) => l.type !== 'Academic leave').reduce((s, l) => {
+      const a = l.from < j ? j : l.from;
+      const b = l.to > upto ? upto : l.to;
+      return s + Math.max(0, daysBetween(a, b));
+    }, 0);
+    return { total, leaveDays, pct: Math.max(0, ((total - leaveDays) / total) * 100) };
+  }
+  function bar(label, got, target, sub = '') {
+    const pct = target ? Math.min(100, (got / target) * 100) : got ? 100 : 0;
+    const ok = target ? got >= target : null;
+    return `<div class="meter"><div class="meter-top"><span>${esc(label)}</span><b class="${ok === true ? 'okt' : ok === false ? 'badt' : ''}">${got}${target ? ' / ' + target : ''}</b></div>
+      <div class="track"><div class="fill ${ok ? 'ok' : ''}" style="width:${pct}%"></div></div>${sub ? `<small>${sub}</small>` : ''}</div>`;
+  }
+  function renderDashboard() {
+    const p = db.profile;
+    const t = db.targets;
+    const cnt = (k, fn) => list(k).filter(fn || (() => true)).length;
+    const posters = cnt('presentations', (r) => /poster/i.test(r.type));
+    const orals = cnt('presentations', (r) => r.type === 'Oral paper');
+    const pubs = cnt('publications', (r) => r.status === 'Accepted' || r.status === 'Published');
+    const drp = list('postings').filter((r) => /DRP/.test(r.type)).reduce((s, r) => s + daysBetween(r.from, r.to), 0);
+    const att = attendance();
+    const allEntries = Object.keys(S).reduce((s, k) => s + list(k).length, 0);
+    const pending = Object.keys(S).reduce((s, k) => s + list(k).filter((r) => r.status !== 'Verified').length, 0);
+    const th = db.thesis;
+    const thesisSteps = [['Protocol submitted', th.protocolDate], ['IEC approval', th.iecDate], ['University approval', th.univDate], ['Data collection started', th.dataStart], ['Data collection completed', th.dataEnd], ['Thesis submitted', th.submitted], ['Thesis accepted', th.accepted]];
+    const bcbr = list('courses').some((r) => /BCBR|Biomedical Research/i.test(r.course || ''));
+    const alerts = [];
+    if (!p.name || !p.joinDate || !p.specialty) alerts.push('Complete your <a href="#/profile">profile</a> (name, specialty, joining date).');
+    if (p.joinDate) {
+      const due = addMonths(p.joinDate, t.thesisProtocolMonths);
+      if (!th.protocolDate && today() > addMonths(p.joinDate, t.thesisProtocolMonths - 1)) alerts.push(`Thesis protocol due by <b>${fmtDate(due)}</b>.`);
+      const sub = addMonths(p.joinDate, t.thesisSubmitMonths);
+      if (!th.submitted && today() > addMonths(p.joinDate, t.thesisSubmitMonths - 3)) alerts.push(`Thesis submission due by <b>${fmtDate(sub)}</b>.`);
+    }
+    if (!bcbr) alerts.push('Basic Course in Biomedical Research (BCBR) not yet recorded — it is mandatory.');
+    if (att && att.pct < t.attendancePct) alerts.push(`Attendance is <b>${att.pct.toFixed(1)}%</b> — below the ${t.attendancePct}% minimum.`);
+    if (pending > 20) alerts.push(`${pending} entries await faculty verification.`);
+    const lastBackup = db.lastBackup ? fmtDate(db.lastBackup.slice(0, 10)) : 'never';
+    if (!db.lastBackup || (Date.now() - new Date(db.lastBackup)) / 86400000 > 14) alerts.push(`Last backup: <b>${lastBackup}</b>. <a href="#/settings">Export a backup</a> — data lives only on this device.`);
+
+    const sem = p.joinDate ? Math.min(6, Math.max(1, Math.floor(daysBetween(p.joinDate, today()) / 182.6) + 1)) : null;
+    $('#main').innerHTML = `
+      <div class="hero card">
+        <div>
+          <h1>${p.name ? esc(p.name) : 'Welcome 👋'}</h1>
+          <p>${esc([p.degree, p.specialty].filter(Boolean).join(' – ') || 'Set up your profile to get started')}${p.college ? ' · ' + esc(p.college) : ''}</p>
+          ${p.joinDate ? `<p class="muted">Joined ${fmtDate(p.joinDate)} · Semester ${sem} · Course ends ${fmtDate(addMonths(p.joinDate, t.courseMonths))}</p>` : ''}
+        </div>
+        <div class="hero-stats">
+          <div><b>${allEntries}</b><span>entries</span></div>
+          <div><b>${allEntries - pending}</b><span>verified</span></div>
+          <div><b>${pending}</b><span>pending</span></div>
+        </div>
+      </div>
+      ${alerts.length ? `<div class="card alerts"><h3>Action needed</h3><ul>${alerts.map((a) => `<li>${a}</li>`).join('')}</ul></div>` : ''}
+      <div class="quick">
+        ${['cases', 'procedures', 'academics', 'wpba'].map((k) => `<button class="btn quick-btn" data-add="${k}">${S[k].icon}<span>+ ${esc(S[k].title.split(' ')[0])}</span></button>`).join('')}
+      </div>
+      <div class="grid2">
+        <div class="card"><h3>PGMER-2023 requirements</h3>
+          ${bar('Poster presentations', posters, t.posters)}
+          ${bar('Oral paper presentations', orals, t.orals)}
+          ${bar('Publications (accepted/published)', pubs, t.publications)}
+          ${bar('District Residency Programme (days)', drp, t.drpDays, '3 months, usually in the 3rd–5th semester')}
+          ${att ? bar('Attendance %', Number(att.pct.toFixed(1)), t.attendancePct, `${att.leaveDays} leave days of ${att.total} days so far`) : '<p class="muted">Add joining date to track attendance.</p>'}
+          ${bar('Periodic appraisals', cnt('appraisals'), t.appraisals)}
+        </div>
+        <div class="card"><h3>Thesis milestones</h3>
+          <ol class="steps">${thesisSteps.map(([l, d]) => `<li class="${d ? 'done' : ''}"><span>${d ? '✓' : ''}</span>${esc(l)}${d ? ` <small>${fmtDate(d)}</small>` : ''}</li>`).join('')}</ol>
+          <a class="btn sm" href="#/thesis">Update thesis</a>
+        </div>
+        <div class="card"><h3>Logbook activity</h3>
+          ${bar('Clinical cases', cnt('cases'), 0)}
+          ${bar('Procedures (performed: PS + PI)', cnt('procedures', (r) => r.level === 'PS' || r.level === 'PI'), 0, `${cnt('procedures')} total incl. observed/assisted`)}
+          ${bar('Seminars presented', cnt('academics', (r) => r.type === 'Seminar' && r.role === 'Presenter'), t.seminars)}
+          ${bar('Journal clubs presented', cnt('academics', (r) => r.type === 'Journal Club' && r.role === 'Presenter'), t.journalClubs)}
+          ${bar('Case presentations', cnt('academics', (r) => r.type === 'Case Presentation' && r.role === 'Presenter'), t.casePresentations)}
+          ${bar('UG teaching sessions', cnt('academics', (r) => r.type === 'UG Teaching (taken by me)'), 0)}
+          ${bar('Workplace-based assessments', cnt('wpba'), t.wpba)}
+        </div>
+        <div class="card"><h3>Courses</h3>${courseChecklist().replace('<div class="card checklist"><h3>Checklist</h3>', '<div class="checklist">')}</div>
+      </div>`;
+    $('#main').querySelectorAll('[data-add]').forEach((b) => (b.onclick = () => { location.hash = '#/c/' + b.dataset.add; setTimeout(() => openEntry(b.dataset.add), 0); }));
+  }
+
+  // ---------- Settings ----------
+  function renderSettings() {
+    const t = db.targets;
+    const num = (n, l, h = '') => `<label class="field"><span>${esc(l)}</span><input type="number" min="0" name="${n}" value="${t[n]}">${h ? `<small>${esc(h)}</small>` : ''}</label>`;
+    const procs = procedureOptions();
+    $('#main').innerHTML = `
+      <h1>⚙️ Targets & Backup</h1>
+      <form id="tf" class="card">
+        <h3>Course targets</h3>
+        <p class="help">Defaults follow PGMER-2023. Your university or department may prescribe more — change them here.</p>
+        <div class="form-grid">
+          ${num('attendancePct', 'Minimum attendance %')}
+          ${num('drpDays', 'DRP duration (days)')}
+          ${num('posters', 'Poster presentations')}
+          ${num('orals', 'Oral paper presentations')}
+          ${num('publications', 'Publications')}
+          ${num('appraisals', 'Periodic appraisals')}
+          ${num('seminars', 'Seminars to present', '0 = no target')}
+          ${num('journalClubs', 'Journal clubs to present', '0 = no target')}
+          ${num('casePresentations', 'Case presentations', '0 = no target')}
+          ${num('wpba', 'Workplace-based assessments', '0 = no target')}
+          ${num('courseMonths', 'Course duration (months)', 'MD/MS 36, Diploma 24')}
+          ${num('thesisProtocolMonths', 'Thesis protocol due (months after joining)')}
+          ${num('thesisSubmitMonths', 'Thesis submission due (months after joining)')}
+        </div>
+        <h3>Procedure targets <small class="muted">(minimum performed: PS + PI)</small></h3>
+        <p class="help">NMC curricula list the skills but most departments set their own numbers. Enter yours; leave 0 for no target.</p>
+        <div class="form-grid proc-targets">
+          ${procs.map((p, i) => `<label class="field"><span>${esc(p)}</span><input type="number" min="0" data-proc="${i}" value="${(t.procedures || {})[p] || 0}"></label>`).join('')}
+        </div>
+        <div class="actions"><button class="btn primary">Save targets</button></div>
+      </form>
+      <div class="card">
+        <h3>Backup & restore</h3>
+        <p class="help">Your logbook is stored only in this browser on this device. Export a backup regularly (and before changing phones), and keep it on Google Drive / email.</p>
+        <div class="actions left">
+          <button class="btn primary" id="exp">Export backup (.json)</button>
+          <label class="btn">Import backup<input type="file" id="imp" accept="application/json,.json" hidden></label>
+          <button class="btn" id="csvAll">Export all as CSV</button>
+          <button class="btn danger" id="wipe">Erase all data</button>
+        </div>
+        <p class="muted">Last backup: ${db.lastBackup ? fmtDate(db.lastBackup.slice(0, 10)) : 'never'}</p>
+      </div>`;
+    $('#tf').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const f = e.target;
+      Object.keys(D.DEFAULT_TARGETS).forEach((k) => { if (k !== 'procedures' && f.elements[k]) t[k] = Math.max(0, Number(f.elements[k].value) || 0); });
+      t.procedures = {};
+      f.querySelectorAll('[data-proc]').forEach((el) => { const v = Number(el.value) || 0; if (v > 0) t.procedures[procs[Number(el.dataset.proc)]] = v; });
+      save();
+      toast('Targets saved');
+    });
+    $('#exp').onclick = exportJSON;
+    $('#imp').onchange = importJSON;
+    $('#csvAll').onclick = () => Object.keys(S).forEach((k, i) => list(k).length && setTimeout(() => exportCSV(k), i * 300));
+    $('#wipe').onclick = () => {
+      if (prompt('This permanently erases ALL logbook data on this device. Type ERASE to confirm.') === 'ERASE') {
+        db = blankDB();
+        save();
+        route();
+        toast('All data erased');
+      }
+    };
+  }
+
+  function download(name, text, type) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type }));
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+  function fileSlug() { return (db.profile.name || 'pg').replace(/[^a-z0-9]+/gi, '_').toLowerCase(); }
+  function exportJSON() {
+    db.lastBackup = new Date().toISOString();
+    save();
+    download(`elogbook_${fileSlug()}_${today()}.json`, JSON.stringify(db, null, 2), 'application/json');
+    toast('Backup downloaded');
+  }
+  function importJSON(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = () => {
+      try {
+        const d = JSON.parse(r.result);
+        if (!d || typeof d !== 'object' || !d.c) throw new Error('Not an e-logbook backup');
+        if (!confirm('Replace current data with this backup? (Export a backup of current data first if unsure.)')) return;
+        localStorage.setItem(STORE_KEY, JSON.stringify(d));
+        db = load();
+        route();
+        toast('Backup restored');
+      } catch (err) {
+        alert('Could not import: ' + err.message);
+      }
+    };
+    r.readAsText(file);
+  }
+  function exportCSV(key) {
+    const sc = S[key];
+    const cols = [...sc.fields.map((f) => f.n), 'status', 'verifiedBy', 'verifiedOn', 'verifyRemark'];
+    const head = [...sc.fields.map((f) => f.l), 'Status', 'Verified by', 'Verified on', 'Verifier remarks'];
+    const q = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+    const lines = [head.map(q).join(','), ...list(key).slice().sort((a, b) => sortKey(a).localeCompare(sortKey(b))).map((r) => cols.map((c) => q(r[c])).join(','))];
+    download(`${key}_${fileSlug()}_${today()}.csv`, '﻿' + lines.join('\r\n'), 'text/csv');
+  }
+
+  // ---------- Printable report ----------
+  function renderReport() {
+    const p = db.profile;
+    const th = db.thesis;
+    const prof = PROFILE_FIELDS.filter((f) => p[f.n]).map((f) => `<tr><th>${esc(f.l)}</th><td>${esc(f.t === 'date' ? fmtDate(p[f.n]) : p[f.n])}</td></tr>`).join('');
+    const order = ['postings', 'cases', 'procedures', 'academics', 'presentations', 'publications', 'conferences', 'courses', 'wpba', 'appraisals', 'mentor', 'reflections', 'leave'];
+    const section = (key) => {
+      const rows = list(key).slice().sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+      const sc = S[key];
+      const cols = key === 'appraisals' ? ['date', 'period', ...D.APPRAISAL_ITEMS.map(([n]) => n), 'avg', 'assessor'] : sc.cols.concat(key === 'cases' ? ['learning'] : []);
+      const lab = (c) => (key === 'appraisals' && /^a\d$/.test(c) ? c.replace('a', 'E') : colLabel(key, c));
+      return `<section class="rep-sec"><h2>${esc(sc.title)} <small>(${rows.length})</small></h2>
+        ${key === 'appraisals' ? `<p class="small">${D.APPRAISAL_ITEMS.map(([n, l], i) => `E${i + 1}: ${esc(l)}`).join(' · ')} — scale 1–9</p>` : ''}
+        ${rows.length ? `<table class="rep"><thead><tr><th>#</th>${cols.map((c) => `<th>${esc(lab(c))}</th>`).join('')}<th>Verified by / date</th><th class="sig">Faculty signature</th></tr></thead>
+        <tbody>${rows.map((r, i) => `<tr><td>${i + 1}</td>${cols.map((c) => `<td>${esc(cellValue(key, r, c))}</td>`).join('')}<td>${r.status === 'Verified' ? esc(r.verifiedBy) + '<br>' + fmtDate(r.verifiedOn) : ''}</td><td></td></tr>`).join('')}</tbody></table>` : '<p class="muted">No entries.</p>'}
+        ${key === 'procedures' && rows.length ? procedureSummary().replace('<details class="card" open>', '<div>').replace('</details>', '</div>') : ''}
+      </section>`;
+    };
+    $('#main').innerHTML = `
+      <div class="no-print head-row"><h1>🖨️ Print Logbook</h1><div class="head-actions"><button class="btn primary" onclick="window.print()">Print / Save as PDF</button></div></div>
+      <p class="help no-print">Print this and get each page counter-signed by your guide/HOD during periodic reviews. Choose “Save as PDF” in the print dialog for a digital copy. Landscape works best.</p>
+      <div class="report">
+        <div class="rep-cover">
+          <h1>POSTGRADUATE e-LOGBOOK</h1>
+          <h2>${esc([p.degree, p.specialty].filter(Boolean).join(' – '))}</h2>
+          <p>${esc(p.college || '')}${p.university ? '<br>' + esc(p.university) : ''}</p>
+          <table class="rep kv">${prof}</table>
+          <p class="small">Maintained as per NMC Post-Graduate Medical Education Regulations, 2023. Generated on ${fmtDate(today())}.</p>
+        </div>
+        <section class="rep-sec"><h2>Thesis / Dissertation</h2>
+          <table class="rep kv">${THESIS_FIELDS.filter((f) => th[f.n]).map((f) => `<tr><th>${esc(f.l)}</th><td>${esc(f.t === 'date' ? fmtDate(th[f.n]) : th[f.n])}</td></tr>`).join('') || '<tr><td>Not entered.</td></tr>'}</table>
+        </section>
+        ${order.map(section).join('')}
+        <section class="rep-sec cert">
+          <h2>Certificate</h2>
+          <p>This is to certify that Dr. <b>${esc(p.name || '______________________')}</b>, ${esc(p.degree || '___')} (${esc(p.specialty || '____________')}) student of ${esc(p.college || '____________________')}, has maintained this logbook during the course period (${p.joinDate ? fmtDate(p.joinDate) + ' to ' + fmtDate(addMonths(p.joinDate, db.targets.courseMonths)) : '__________'}). The entries are a true record of the work done, and the student has satisfactorily completed the postgraduate training requirements as per NMC PGMER-2023.</p>
+          <div class="sig-row"><div>Signature of Student<br><br>Date:</div><div>Signature of Guide<br>${esc(p.guide || '')}<br>Date:</div><div>Signature of HOD (with seal)<br>${esc(p.hod || '')}<br>Date:</div></div>
+        </section>
+      </div>`;
+  }
+
+  // ---------- Rules page ----------
+  function renderRules() {
+    $('#main').innerHTML = `
+      <h1>📜 NMC rules this logbook follows</h1>
+      <div class="card prose">
+        <p class="help">Summary of requirements in the NMC <b>Post-Graduate Medical Education Regulations, 2023 (PGMER-2023)</b> and the NMC competency-based PG curriculum guidelines. Always check the latest NMC notifications and your university's regulations — they prevail.</p>
+        <h3>Logbook</h3>
+        <ul>
+          <li>Every PG student must maintain a logbook (electronic logbook encouraged) recording clinical work, procedures done/assisted, academic activities and presentations.</li>
+          <li>The logbook must be checked and assessed periodically by the faculty, and is a record of the student's training.</li>
+          <li>A satisfactory, certified logbook (by guide and HOD) is required for eligibility to appear in the final university examination.</li>
+        </ul>
+        <h3>Thesis</h3>
+        <ul>
+          <li>Thesis is compulsory for MD/MS. Protocol is submitted early in the course (typically within the first 6 months) after Institutional Ethics Committee approval.</li>
+          <li>The accepted thesis is a precondition for appearing in the final exam; submission is usually required ~6 months before the exam.</li>
+        </ul>
+        <h3>Research output</h3>
+        <ul>
+          <li>At least one <b>poster</b> and one <b>oral paper</b> presentation at a conference.</li>
+          <li>At least one <b>research paper</b> published or accepted in an indexed journal.</li>
+          <li>Completion of the <b>Basic Course in Biomedical Research (BCBR)</b>.</li>
+        </ul>
+        <h3>District Residency Programme (DRP)</h3>
+        <ul><li>Compulsory 3-month rotation in a district health system / district hospital, typically in the 3rd, 4th or 5th semester. Log it under <a href="#/c/postings">Postings & DRP</a>.</li></ul>
+        <h3>Attendance & leave</h3>
+        <ul><li>Minimum 80% attendance in each year is generally required for eligibility to appear in the exam. PG students are full-time residents.</li></ul>
+        <h3>Assessment</h3>
+        <ul>
+          <li>Formative assessment throughout the course, including workplace-based assessment (Mini-CEX, DOPS, CbD, 360° feedback) and internal examinations.</li>
+          <li>Periodic appraisal using the NMC Student Appraisal Form (elements scored 1–9).</li>
+          <li>Level of participation in procedures: Observed → Assisted → Performed under supervision → Performed independently.</li>
+        </ul>
+        <h3>Patient privacy</h3>
+        <ul><li>Do not record patient names or other identifiers beyond hospital UHID/IP numbers (Digital Personal Data Protection Act, 2023). Data in this app stays on your device.</li></ul>
+        <p class="muted">See <code>docs/NMC-RULES.md</code> in the repository for sources.</p>
+      </div>`;
+  }
+
+  // ---------- Modal & toast ----------
+  function modal(html) {
+    const m = $('#modal');
+    $('#modal .modal-body').innerHTML = html;
+    m.hidden = false;
+    document.body.classList.add('modal-open');
+    m.querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal));
+    const first = m.querySelector('input,select,textarea');
+    if (first) first.focus();
+  }
+  function closeModal() {
+    $('#modal').hidden = true;
+    document.body.classList.remove('modal-open');
+  }
+  let toastT;
+  function toast(msg) {
+    const t = $('#toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastT);
+    toastT = setTimeout(() => t.classList.remove('show'), 1800);
+  }
+
+  // ---------- Boot ----------
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#modal').hidden) closeModal(); });
+  $('#modal').addEventListener('click', (e) => { if (e.target.id === 'modal') closeModal(); });
+  $('#menuBtn').onclick = () => document.body.classList.toggle('nav-open');
+  window.addEventListener('hashchange', route);
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+  route();
+})();
