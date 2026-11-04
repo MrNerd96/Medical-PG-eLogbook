@@ -4,6 +4,8 @@
   const D = window.PGDATA;
   const STORE_KEY = 'pgElogbook.v1';
   const $ = (s, el = document) => el.querySelector(s);
+  let FRAMED = false;
+  try { FRAMED = window.self !== window.top; } catch (e) { FRAMED = true; }
 
   // ---------- Storage ----------
   function blankDB() {
@@ -33,7 +35,7 @@
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify(db));
     } catch (e) {
-      alert('Could not save — device storage may be full. Please export a backup.');
+      toast('Could not save. Device storage may be full, so export a backup.');
     }
   }
   const list = (k) => (db.c[k] = db.c[k] || []);
@@ -298,31 +300,31 @@
   const NAV = [
     ['dashboard', '🏠', 'Dashboard'],
     ['profile', '👤', 'Profile'],
-    ...['cases', 'procedures', 'academics'].map((k) => ['c/' + k, S[k].icon, S[k].title]),
+    ...['cases', 'procedures', 'academics'].map((k) => [k, S[k].icon, S[k].title]),
     ['thesis', '🔬', 'Thesis'],
-    ...['presentations', 'publications', 'conferences', 'wpba', 'appraisals', 'postings', 'leave', 'courses', 'mentor', 'reflections'].map((k) => ['c/' + k, S[k].icon, S[k].title]),
+    ...['presentations', 'publications', 'conferences', 'wpba', 'appraisals', 'postings', 'leave', 'courses', 'mentor', 'reflections'].map((k) => [k, S[k].icon, S[k].title]),
     ['report', '🖨️', 'Print Logbook'],
-    ['settings', '⚙️', 'Targets & Backup'],
+    ['targets', '⚙️', 'Targets & Backup'],
     ['rules', '📜', 'NMC Rules']
   ];
 
   function renderNav() {
-    const cur = location.hash.replace(/^#\/?/, '') || 'dashboard';
+    const cur = location.hash.replace(/^#\/?(c\/)?/, '').replace(/^settings$/, 'targets') || 'dashboard';
     $('#nav').innerHTML = NAV.map(([r, i, l]) => {
-      const n = r.startsWith('c/') ? list(r.slice(2)).length : '';
-      return `<a href="#/${r}" class="${cur === r ? 'active' : ''}"><span class="ni">${i}</span><span>${esc(l)}</span>${n !== '' ? `<span class="badge">${n}</span>` : ''}</a>`;
+      const n = S[r] ? list(r).length : '';
+      return `<a href="#${r}" class="${cur === r ? 'active' : ''}"><span class="ni">${i}</span><span>${esc(l)}</span>${n !== '' ? `<span class="badge">${n}</span>` : ''}</a>`;
     }).join('');
   }
 
   function route() {
-    const h = location.hash.replace(/^#\/?/, '') || 'dashboard';
+    const h = location.hash.replace(/^#\/?(c\/)?/, '').replace(/^settings$/, 'targets') || 'dashboard';
     const main = $('#main');
     document.body.classList.remove('nav-open');
-    if (h.startsWith('c/') && S[h.slice(2)]) renderCollection(h.slice(2));
+    if (S[h]) renderCollection(h);
     else if (h === 'profile') renderSingle('profile', 'Student Profile', PROFILE_FIELDS, 'These details appear on the cover page of your printed logbook.');
     else if (h === 'thesis') renderSingle('thesis', 'Thesis / Dissertation', THESIS_FIELDS, thesisHelp());
     else if (h === 'report') renderReport();
-    else if (h === 'settings') renderSettings();
+    else if (h === 'targets') renderSettings();
     else if (h === 'rules') renderRules();
     else renderDashboard();
     renderNav();
@@ -435,12 +437,13 @@
         const id = b.closest('tr').dataset.id;
         if (b.dataset.act === 'edit') openEntry(key, id);
         else if (b.dataset.act === 'verify') openVerify(key, [id]);
-        else if (b.dataset.act === 'del' && confirm('Delete this entry permanently?')) {
+        else if (b.dataset.act === 'del') askConfirm('Delete this entry?', 'This entry will be removed permanently.', 'Delete', () => {
           db.c[key] = list(key).filter((r) => r.id !== id);
           save();
           renderCollection(key);
           renderNav();
-        }
+          toast('Entry deleted');
+        });
       };
     });
   }
@@ -469,7 +472,7 @@
     $('#ef').addEventListener('submit', (e) => {
       e.preventDefault();
       const data = readForm(e.target, sc.fields);
-      if (data.from && data.to && data.to < data.from) return alert('"To" date cannot be before "From" date.');
+      if (data.from && data.to && data.to < data.from) return toast('The "To" date must be on or after the "From" date.');
       if (key === 'procedures' && data.procedure && !procedureOptions().includes(data.procedure)) {
         db.customProcedures.push(data.procedure);
       }
@@ -607,24 +610,25 @@
     const thesisSteps = [['Protocol submitted', th.protocolDate], ['IEC approval', th.iecDate], ['University approval', th.univDate], ['Data collection started', th.dataStart], ['Data collection completed', th.dataEnd], ['Thesis submitted', th.submitted], ['Thesis accepted', th.accepted]];
     const missingCourses = D.MANDATORY_COURSES.filter((c) => c.req && !list('courses').some((r) => (r.course || '').toLowerCase() === c.name.toLowerCase()));
     const alerts = [];
-    if (!p.name || !p.joinDate || !p.specialty) alerts.push('Complete your <a href="#/profile">profile</a> (name, specialty, joining date).');
+    if (!p.name || !p.joinDate || !p.specialty) alerts.push('Complete your <a href="#profile">profile</a> (name, specialty, joining date).');
     if (p.joinDate) {
       const due = addMonths(p.joinDate, t.thesisProtocolMonths);
       if (!th.protocolDate && today() > addMonths(p.joinDate, t.thesisProtocolMonths - 1)) alerts.push(`Thesis protocol due by <b>${fmtDate(due)}</b>.`);
       const sub = addMonths(p.joinDate, t.thesisSubmitMonths);
       if (!th.submitted && today() > addMonths(p.joinDate, t.thesisSubmitMonths - 3)) alerts.push(`Thesis submission due by <b>${fmtDate(sub)}</b>.`);
     }
-    if (missingCourses.length) alerts.push(`Mandatory course(s) not yet recorded: <b>${missingCourses.map((c) => esc(c.name)).join(', ')}</b>. <a href="#/c/courses">Add</a>`);
+    if (missingCourses.length) alerts.push(`Mandatory course(s) not yet recorded: <b>${missingCourses.map((c) => esc(c.name)).join(', ')}</b>. <a href="#courses">Add</a>`);
     if (p.joinDate && (!lastEntry || (Date.now() - new Date(lastEntry)) / 86400000 > 7)) alerts.push('No logbook entry in the last 7 days — PGMER-2023 expects the e-logbook to be <b>updated weekly</b>.');
     if (stale) alerts.push(`<b>${stale}</b> entr${stale > 1 ? 'ies are' : 'y is'} more than a month old and still unverified — your guide must <b>authenticate the logbook monthly</b>.`);
     if (p.joinDate && leaveIn('Casual leave') > t.casualLeave) alerts.push(`Casual leave this year: <b>${leaveIn('Casual leave')}</b> days — exceeds the ${t.casualLeave}-day entitlement (excess extends tenure).`);
     if (p.joinDate && leaveIn('Academic leave') > t.academicLeave) alerts.push(`Academic leave this year: <b>${leaveIn('Academic leave')}</b> days — exceeds the ${t.academicLeave}-day entitlement.`);
     if (att && att.pct < t.attendancePct) alerts.push(`Attendance is <b>${att.pct.toFixed(1)}%</b> — below the ${t.attendancePct}% minimum.`);
     const lastBackup = db.lastBackup ? fmtDate(db.lastBackup.slice(0, 10)) : 'never';
-    if (!db.lastBackup || (Date.now() - new Date(db.lastBackup)) / 86400000 > 14) alerts.push(`Last backup: <b>${lastBackup}</b>. <a href="#/settings">Export a backup</a> — data lives only on this device.`);
+    if (!db.lastBackup || (Date.now() - new Date(db.lastBackup)) / 86400000 > 14) alerts.push(`Last backup: <b>${lastBackup}</b>. <a href="#targets">Export a backup</a> — data lives only on this device.`);
 
     const sem = p.joinDate ? Math.min(6, Math.max(1, Math.floor(daysBetween(p.joinDate, today()) / 182.6) + 1)) : null;
     $('#main').innerHTML = `
+      ${db.sample ? `<div class="card sample-note"><div><b>You are looking at sample data.</b> Dr Ananya Rao is a made-up MS General Surgery student. Explore freely; nothing here is real.</div><button class="btn" id="startFresh">Start my own logbook</button></div>` : ''}
       <div class="hero card">
         <div>
           <h1>${p.name ? esc(p.name) : 'Welcome 👋'}</h1>
@@ -658,7 +662,7 @@
         </div>
         <div class="card"><h3>Thesis milestones</h3>
           <ol class="steps">${thesisSteps.map(([l, d]) => `<li class="${d ? 'done' : ''}"><span>${d ? '✓' : ''}</span>${esc(l)}${d ? ` <small>${fmtDate(d)}</small>` : ''}</li>`).join('')}</ol>
-          <a class="btn sm" href="#/thesis">Update thesis</a>
+          <a class="btn sm" href="#thesis">Update thesis</a>
         </div>
         <div class="card"><h3>Logbook activity</h3>
           ${bar('Clinical cases', cnt('cases'), 0)}
@@ -671,7 +675,8 @@
         </div>
         <div class="card"><h3>Courses</h3>${courseChecklist().replace('<div class="card checklist"><h3>Checklist</h3>', '<div class="checklist">')}</div>
       </div>`;
-    $('#main').querySelectorAll('[data-add]').forEach((b) => (b.onclick = () => { location.hash = '#/c/' + b.dataset.add; setTimeout(() => openEntry(b.dataset.add), 0); }));
+    if ($('#startFresh')) $('#startFresh').onclick = () => askConfirm('Start your own logbook?', 'The sample entries will be removed so you can enter your own details.', 'Remove sample data', () => { db = blankDB(); save(); location.hash = '#profile'; route(); });
+    $('#main').querySelectorAll('[data-add]').forEach((b) => (b.onclick = () => { location.hash = '#' + b.dataset.add; setTimeout(() => openEntry(b.dataset.add), 0); }));
   }
 
   // ---------- Settings ----------
@@ -711,6 +716,7 @@
       </form>
       <div class="card">
         <h3>Backup & restore</h3>
+        ${FRAMED ? '<p class="warn">This preview page cannot save files. Export, import and CSV work in the installed app.</p>' : ''}
         <p class="help">Your logbook is stored only in this browser on this device. Export a backup regularly (and before changing phones), and keep it on Google Drive / email.</p>
         <div class="actions left">
           <button class="btn primary" id="exp">Export backup (.json)</button>
@@ -733,12 +739,12 @@
     $('#imp').onchange = importJSON;
     $('#csvAll').onclick = () => Object.keys(S).forEach((k, i) => list(k).length && setTimeout(() => exportCSV(k), i * 300));
     $('#wipe').onclick = () => {
-      if (prompt('This permanently erases ALL logbook data on this device. Type ERASE to confirm.') === 'ERASE') {
+      askConfirm('Erase all data?', 'This permanently erases every logbook entry on this device. Type ERASE to confirm.', 'Erase all data', () => {
         db = blankDB();
         save();
         route();
         toast('All data erased');
-      }
+      }, 'ERASE');
     };
   }
 
@@ -765,13 +771,15 @@
       try {
         const d = JSON.parse(r.result);
         if (!d || typeof d !== 'object' || !d.c) throw new Error('Not an e-logbook backup');
-        if (!confirm('Replace current data with this backup? (Export a backup of current data first if unsure.)')) return;
-        localStorage.setItem(STORE_KEY, JSON.stringify(d));
-        db = load();
-        route();
-        toast('Backup restored');
+        askConfirm('Replace current data?', 'Everything on this device will be replaced by the backup. Export a backup of the current data first if unsure.', 'Replace data', () => {
+          try { localStorage.setItem(STORE_KEY, JSON.stringify(d)); } catch (err) { /* storage blocked */ }
+          db = load();
+          if (!db.c || !Object.keys(db.c).length) db = Object.assign(blankDB(), d);
+          route();
+          toast('Backup restored');
+        });
       } catch (err) {
-        alert('Could not import: ' + err.message);
+        toast('Could not import: ' + err.message);
       }
     };
     r.readAsText(file);
@@ -787,6 +795,7 @@
 
   // ---------- Printable report ----------
   function renderReport() {
+    setTimeout(() => { const b = $('#printBtn'); if (b) b.onclick = () => window.print(); }, 0);
     const p = db.profile;
     const th = db.thesis;
     const prof = PROFILE_FIELDS.filter((f) => p[f.n]).map((f) => `<tr><th>${esc(f.l)}</th><td>${esc(f.t === 'date' ? fmtDate(p[f.n]) : p[f.n])}</td></tr>`).join('');
@@ -804,7 +813,7 @@
       </section>`;
     };
     $('#main').innerHTML = `
-      <div class="no-print head-row"><h1>🖨️ Print Logbook</h1><div class="head-actions"><button class="btn primary" onclick="window.print()">Print / Save as PDF</button></div></div>
+      <div class="no-print head-row"><h1>🖨️ Print Logbook</h1><div class="head-actions">${FRAMED ? '<span class="pill pend">Printing works in the installed app</span>' : '<button class="btn primary" id="printBtn">Print / Save as PDF</button>'}</div></div>
       <p class="help no-print">Print this and get each page counter-signed by your guide/HOD during periodic reviews. Choose “Save as PDF” in the print dialog for a digital copy. Landscape works best.</p>
       <div class="report">
         <div class="rep-cover">
@@ -850,7 +859,7 @@
           <li>Mandatory courses: <b>online Research Methodology course</b>, <b>Ethics (incl. GCP/GLP)</b>, <b>BCLS</b> and <b>ACLS</b>.</li>
         </ul>
         <h3>District Residency Programme (DRP)</h3>
-        <ul><li>Compulsory 3-month rotation in a district health system / district hospital, typically in the 3rd, 4th or 5th semester. Certification of satisfactory completion is needed for the exam; the college reports DRP details to NMC within 1 week. Log it under <a href="#/c/postings">Postings & DRP</a>.</li></ul>
+        <ul><li>Compulsory 3-month rotation in a district health system / district hospital, typically in the 3rd, 4th or 5th semester. Certification of satisfactory completion is needed for the exam; the college reports DRP details to NMC within 1 week. Log it under <a href="#postings">Postings & DRP</a>.</li></ul>
         <h3>Attendance & leave</h3>
         <ul><li>Minimum <b>80% attendance</b> (counted over the whole course) for exam eligibility. PG students are full-time residents.</li>
         <li>Leave: <b>20 paid casual leaves</b> and <b>5 paid academic leaves</b> per year, one weekly off, maternity/paternity leave as per government rules. Leave beyond this extends the course tenure.</li></ul>
@@ -867,6 +876,19 @@
   }
 
   // ---------- Modal & toast ----------
+  function askConfirm(title, text, okLabel, onOk, typeWord) {
+    modal(`<h2>${esc(title)}</h2><p>${esc(text)}</p>
+      <form id="cf" class="form-grid">
+        ${typeWord ? `<label class="field wide" for="cf_word"><span>Type ${esc(typeWord)}</span><input id="cf_word" name="word" autocomplete="off" required></label>` : ''}
+        <div class="actions wide"><button type="button" class="btn" data-close>Cancel</button><button class="btn danger-fill">${esc(okLabel)}</button></div>
+      </form>`);
+    $('#cf').addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (typeWord && e.target.elements.word.value.trim() !== typeWord) return toast(`Type ${typeWord} to confirm.`);
+      closeModal();
+      onOk();
+    });
+  }
   function modal(html) {
     const m = $('#modal');
     $('#modal .modal-body').innerHTML = html;
@@ -896,5 +918,6 @@
   window.addEventListener('hashchange', route);
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+  if (window.PG_SAMPLE && !db.profile.name && !Object.keys(db.c).some((k) => db.c[k].length)) { db = window.PG_SAMPLE(blankDB()); save(); }
   route();
 })();

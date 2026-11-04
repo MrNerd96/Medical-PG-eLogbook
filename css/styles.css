@@ -17,12 +17,18 @@
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #0f1419; --card: #182029; --text: #e6edf3; --muted: #9aa8b5; --line: #2a3541;
     --primary: #4aa8dc; --primary-ink: #06131c; --primary-soft: #16324a;
     --ok: #4cc48a; --ok-soft: #133826; --warn: #f0b45a; --warn-soft: #3a2a10; --danger: #ff6b5e;
     color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+    --bg: #0f1419; --card: #182029; --text: #e6edf3; --muted: #9aa8b5; --line: #2a3541;
+    --primary: #4aa8dc; --primary-ink: #06131c; --primary-soft: #16324a;
+    --ok: #4cc48a; --ok-soft: #133826; --warn: #f0b45a; --warn-soft: #3a2a10; --danger: #ff6b5e;
+    color-scheme: dark;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
@@ -40,7 +46,7 @@ h3 { font-size: 1rem; margin: 0 0 .6rem; }
 
 /* Layout */
 .topbar {
-  position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: .75rem;
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; display: flex; align-items: center; gap: .75rem;
   padding: .6rem 1rem; background: var(--card); border-bottom: 1px solid var(--line);
 }
 .brand { display: flex; align-items: center; gap: .5rem; font-weight: 700; color: var(--text); text-decoration: none; }
@@ -113,6 +119,10 @@ main { padding: 1.25rem; max-width: 1200px; width: 100%; outline: none; min-widt
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); }
 .btn.danger { color: var(--danger); }
+.btn.danger-fill { background: var(--danger); border-color: var(--danger); color: var(--card); }
+.sample-note { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; justify-content: space-between; border-color: var(--primary); background: var(--primary-soft); }
+.sample-note > div { flex: 1 1 260px; min-width: 0; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 .btn.sm { padding: .2rem .55rem; min-height: 32px; font-size: .85rem; }
 
 /* Forms */
