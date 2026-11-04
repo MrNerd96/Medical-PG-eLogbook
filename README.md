@@ -67,6 +67,11 @@ Open `mbbs/index.html` (or `/mbbs/` on GitHub Pages). Rules and sources: `docs/N
 ### Hosting on GitHub Pages
 Repository **Settings → Pages → Deploy from a branch →** pick the branch, folder `/ (root)`.
 
+## Design
+Both apps are styled as a clinical record register: ruled tables, a red margin rule and a surgical-green accent, with
+light and dark themes. Fonts are IBM Plex Sans and IBM Plex Mono (SIL Open Font License), bundled in `fonts/` so the apps
+work offline.
+
 ## Privacy
 Do not enter patient names or other identifiers. Use hospital UHID/IP numbers only, in line with the Digital
 Personal Data Protection Act, 2023. No data leaves the device unless you export it.
