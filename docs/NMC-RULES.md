@@ -19,6 +19,26 @@ NMC issues amendments and advisories, and universities add their own rules.
 > vendors, not NMC. A May 2025 draft PGMER amendment (HOD rotation, super-specialty feeder courses) does not
 > change the logbook rules.
 
+## Exact wording (PGMER-2023, Gazette of India, 29 Dec 2023, clause 5.2)
+Gazette copy: <https://medicaldialogues.in/pdf_upload/pgmer-2023-229326.pdf>
+
+> **5.2 (vi)** Post-graduate students of broad and super Speciality degree courses shall maintain a dynamic e-log book
+> which needs to be updated on a weekly basis about the work being carried out by them and the training programme
+> undergone during the period of training. Provided that M.S. /M.Ch students shall mandatorily enter details of
+> surgical procedures assisted or done independently.
+>
+> **5.2 (vii)** It shall be the duty of the Post-graduate guide imparting the training to assess and authenticate
+> monthly the record (e-Log) books.
+>
+> **5.2 (x)** A post-graduate student of a degree course in broad specialty/super specialty will do at least one of the
+> following to make him/her eligible to appear in his/her final examination: a. Poster presentation at a
+> National/Zonal/State conference of his/her speciality; b. Podium presentation at a National/Zonal/State conference of
+> his/her speciality; c. Have one research paper published/accepted for publication in journal of his/her speciality as
+> first author.
+
+The regulation does not prescribe how the guide authenticates the e-log book (no digital signature, portal or app is
+specified).
+
 ## Requirements and where they live in the app
 
 | Requirement | App section | Default target |
