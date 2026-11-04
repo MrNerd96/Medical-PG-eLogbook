@@ -38,6 +38,23 @@ attendance, appraisals), thesis milestones, course completion, and alerts for du
 All targets can be edited under **Targets & Backup**, including per-procedure minimum numbers set by your
 department.
 
+## MBBS (UG) e-logbook
+
+The `mbbs/` folder has a second app for **MBBS students**, built on the NMC *Guidelines for preparing Logbook* and the
+**CBME Curriculum 2024**:
+
+- **Competency log** in the NMC 8-column format: competency #, activity, date, attempt F/R/Re, rating B/M/E or score,
+  faculty decision C/R/Re, faculty initial, feedback received. Includes a certifiable-competency flag.
+- **Foundation Course**, **Early Clinical Exposure**, **AETCOM** (modules by phase), **Family Adoption Programme**
+  (families and visits), **clinical postings**, **case records**, **electives**, **internal assessment**, **attendance**,
+  and SDL, seminars, sports and mentoring.
+- **Dashboard** checks university-exam eligibility per subject: 75% theory and 80% practical attendance, IA of 40% each and
+  50% combined, and certifiable competencies. It also checks AETCOM 75%, FAP 3 families and 80% visits, Foundation Course 75%
+  and electives 75%.
+- **Print Logbook**: one logbook per phase, with the final summary and the NMC logbook certificate.
+
+Open `mbbs/index.html` (or `/mbbs/` on GitHub Pages). Rules and sources: `docs/NMC-MBBS-RULES.md`.
+
 ## Using it
 
 1. Open `index.html` through any static web host (GitHub Pages works). Service workers need `http(s)`, so for

@@ -313,7 +313,7 @@
     $('#nav').innerHTML = NAV.map(([r, i, l]) => {
       const n = S[r] ? list(r).length : '';
       return `<a href="#${r}" class="${cur === r ? 'active' : ''}"><span class="ni">${i}</span><span>${esc(l)}</span>${n !== '' ? `<span class="badge">${n}</span>` : ''}</a>`;
-    }).join('');
+    }).join('') + '<a href="mbbs/index.html" class="switch"><span class="ni">↗</span><span>MBBS (UG) logbook</span></a>';
   }
 
   function route() {

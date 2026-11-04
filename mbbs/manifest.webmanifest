@@ -1,0 +1,13 @@
+{
+  "name": "MBBS e-Logbook (NMC CBME)",
+  "short_name": "MBBS Logbook",
+  "description": "Offline e-logbook for MBBS students in India, following the NMC CBME Curriculum 2024.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f7fa",
+  "theme_color": "#0f5f8c",
+  "icons": [
+    { "src": "../icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
