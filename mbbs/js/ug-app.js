@@ -247,13 +247,17 @@
     attendance: (r) => `${r.subject ? subjName(r.subject) + ' ' : ''}${r.component}: ${r.attended}/${r.held}`,
     activities: (r) => `${r.type}: ${r.title}`
   };
+  const CS = window.CustomSections({
+    db: () => db, S, list, save, toast, askConfirm, modal, closeModal,
+    onChange: () => renderNav()
+  });
   const SO = window.SignOff({
     db: () => db, save, toast, askConfirm, modal, closeModal, FRAMED,
     onChange: () => renderNav(),
-    sections: Object.keys(S).map((key) => ({ key, title: S[key].title })),
+    get sections() { return Object.keys(S).map((key) => ({ key, title: S[key].title })); },
     list,
     entryDate: (key, r) => r.date || r.from || r.asOf || r.adopted || '',
-    entryLabel: (key, r) => (LABEL[key] ? LABEL[key](r) : r.title || ''),
+    entryLabel: (key, r) => (LABEL[key] ? LABEL[key](r) : CS.isCustom(key) ? CS.label(key, r) : r.title || ''),
     subjects: () => Object.entries(U.SUBJECTS).map(([v, l]) => ({ v, l })),
     subjectOf: (key, r) => r.subject || '',
     subjectName: (c) => subjName(c),
@@ -296,11 +300,13 @@
     ['Family Adoption', [['families', 'Adopted families'], ['visits', 'Family visits']]],
     ['Clinical', [['postings', 'Clinical postings'], ['cases', 'Case records'], ['electives', 'Electives']]],
     ['Assessment', [['ia', 'Internal assessment'], ['attendance', 'Attendance']]],
-    ['Logbook', [['print-logbook', 'Print logbook'], ['targets', 'Targets & backup'], ['rules', 'NMC rules']]]
+    ['Logbook', [['print-logbook', 'Print logbook'], ['targets', 'Backup & targets'], ['rules', 'NMC rules']]]
   ];
   function renderNav() {
     const cur = location.hash.replace(/^#\/?/, '') || 'dashboard';
-    $('#nav').innerHTML = NAV_GROUPS.map(([g, items]) => `<div class="nav-h">${esc(g)}</div>` + items.map(([r, l]) => {
+    const groups = NAV_GROUPS.slice();
+    groups.splice(groups.length - 1, 0, ['My sections', [...CS.navItems(), ['my-sections', '+ Add or manage']]]);
+    $('#nav').innerHTML = groups.map(([g, items]) => `<div class="nav-h">${esc(g)}</div>` + items.map(([r, l]) => {
       const n = S[r] ? list(r).length : '';
       return `<a href="#${r}" class="${cur === r ? 'active' : ''}"${cur === r ? ' aria-current="page"' : ''}><span>${esc(l)}</span>${n !== '' ? `<span class="badge">${n}</span>` : ''}</a>`;
     }).join('')).join('') + (FRAMED ? '' : '<a href="../index.html" class="switch"><span>PG (MD/MS) logbook →</span></a>');
@@ -308,7 +314,9 @@
   function route() {
     const h = location.hash.replace(/^#\/?/, '') || 'dashboard';
     document.body.classList.remove('nav-open');
+    CS.sync();
     if (S[h]) renderCollection(h);
+    else if (h === 'my-sections') CS.render();
     else if (h === 'profile') renderProfile();
     else if (h === 'print-logbook') renderReport();
     else if (h === 'signoff') { SO.reset(); SO.render(); }
@@ -585,7 +593,18 @@
   function renderSettings() {
     const t = db.targets;
     const subs = Object.keys(U.SUBJECTS);
-    $('#main').innerHTML = `<h1>Targets & backup</h1>
+    $('#main').innerHTML = `<h1>Backup & targets</h1>
+      <div class="card"><h3>Backup & restore</h3>
+        ${FRAMED ? '<p class="warn">This preview page cannot save files. Export, import and CSV work in the installed app.</p>' : ''}
+        <p class="help">Your logbook is saved on this phone automatically. To keep a safe copy, back it up to your own Google Drive, or send it to yourself on WhatsApp or email. Nobody else can see it.</p>
+        <div class="actions left">
+          <button class="btn primary" id="exp">Back up to Drive, WhatsApp or email</button>
+          <button class="btn" id="expDl">Download backup file</button>
+          <label class="btn" for="imp">Restore from a backup<input type="file" id="imp" accept="${window.ElogBackup.ACCEPT}" hidden></label>
+          <button class="btn danger" id="wipe">Erase all data</button>
+        </div>
+        <p class="muted small">To restore on a new phone: install the app, tap <b>Restore from a backup</b> and pick the file. On Android you can open it straight from Google Drive.</p>
+        <p class="muted">Last backup: ${db.lastBackup ? fmtDate(db.lastBackup.slice(0, 10)) : 'never'}</p></div>
       <form id="tf" class="card"><h3>Targets</h3><p class="help">Defaults follow NMC CBME 2024. Your college may set the number of certifiable competencies per subject.</p>
         <div class="form-grid">
           <label class="field" for="t_fm"><span>Minimum families (FAP)</span><input id="t_fm" type="number" min="0" name="fapFamiliesMin" value="${t.fapFamiliesMin}"></label>
@@ -596,15 +615,7 @@
         <h3>Certifiable competencies required per subject</h3>
         <div class="form-grid">${subs.map((s) => `<label class="field" for="tc_${s}"><span>${esc(subjName(s))}</span><input id="tc_${s}" type="number" min="0" data-cert="${s}" value="${(t.cert || {})[s] || 0}"></label>`).join('')}</div>
         <div class="actions"><button class="btn primary">Save targets</button></div></form>
-      <div class="card"><h3>Backup & restore</h3>
-        ${FRAMED ? '<p class="warn">This preview page cannot save files. Export, import and CSV work in the installed app.</p>' : ''}
-        <p class="help">Your logbook is stored only in this browser on this device. Export a backup regularly and keep it on Drive or email.</p>
-        <div class="actions left">
-          <button class="btn primary" id="exp">Export backup (.json)</button>
-          <label class="btn" for="imp">Import backup<input type="file" id="imp" accept="application/json,.json" hidden></label>
-          <button class="btn danger" id="wipe">Erase all data</button>
-        </div>
-        <p class="muted">Last backup: ${db.lastBackup ? fmtDate(db.lastBackup.slice(0, 10)) : 'never'}</p></div>`;
+`;
     $('#tf').addEventListener('submit', (e) => {
       e.preventDefault();
       const f = e.target.elements;
@@ -613,7 +624,20 @@
       e.target.querySelectorAll('[data-cert]').forEach((el) => { const v = +el.value || 0; if (v) t.cert[el.dataset.cert] = v; });
       save(); toast('Targets saved');
     });
-    $('#exp').onclick = () => { db.lastBackup = new Date().toISOString(); save(); download(`mbbs_logbook_${slug()}_${today()}.json`, JSON.stringify(db, null, 2), 'application/json'); toast('Backup downloaded'); };
+    const backup = (viaShare) => {
+      const name = `mbbs_logbook_backup_${slug()}_${today()}`;
+      const text = JSON.stringify(db);
+      const done = (how) => {
+        if (how === 'cancelled') return;
+        db.lastBackup = new Date().toISOString(); save();
+        toast(how === 'shared' ? 'Backup sent' : 'Backup file saved to Downloads');
+        renderSettings();
+      };
+      if (viaShare) window.ElogBackup.save(name, text, 'MBBS logbook backup').then(done);
+      else done(window.ElogBackup.download(new File([text], name + '.txt', { type: 'text/plain' })));
+    };
+    $('#exp').onclick = () => backup(true);
+    $('#expDl').onclick = () => backup(false);
     $('#imp').onchange = (e) => {
       const file = e.target.files[0]; if (!file) return;
       const r = new FileReader();
@@ -671,6 +695,7 @@
       sections.push(['Case records', simple('cases', ['date', 'subject', 'setting', 'diagnosis', 'presented'], list('cases').slice().sort(byDate))]);
     }
     if (ph === 'P3B') sections.push(['Electives', simple('electives', ['block', 'name', 'supervisor', 'from', 'to', 'attPct', 'log'], list('electives'))]);
+    Object.keys(S).filter(CS.isCustom).forEach((k) => { const rows = list(k).slice().sort(byDate); if (rows.length) sections.push([S[k].title, simple(k, S[k].cols, rows)]); });
     sections.push(['Other activities (SDL, seminars, sports, extracurricular, mentoring)', simple('activities', ['date', 'type', 'title', 'with'], list('activities').slice().sort(byDate))]);
     sections.push(['Internal assessment', simple('ia', ['date', 'subject', 'kind', 'exam', 'result'], inPhase('ia'))]);
 

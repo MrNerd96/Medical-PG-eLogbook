@@ -286,13 +286,17 @@
     mentor: (r) => `Mentor meeting${r.mentor ? ' with ' + r.mentor : ''}`,
     reflections: (r) => `Reflection: ${r.title}`
   };
+  const CS = window.CustomSections({
+    db: () => db, S, list, save, toast, askConfirm, modal, closeModal,
+    onChange: () => renderNav()
+  });
   const SO = window.SignOff({
     db: () => db, save, toast, askConfirm, modal, closeModal, FRAMED,
     onChange: () => renderNav(),
-    sections: Object.keys(S).map((key) => ({ key, title: S[key].title })),
+    get sections() { return Object.keys(S).map((key) => ({ key, title: S[key].title })); },
     list,
     entryDate: (key, r) => r.date || r.from || '',
-    entryLabel: (key, r) => (LABEL[key] ? LABEL[key](r) : r.title || ''),
+    entryLabel: (key, r) => (LABEL[key] ? LABEL[key](r) : CS.isCustom(key) ? CS.label(key, r) : r.title || ''),
     student: () => ({ name: db.profile.name, line: [db.profile.degree, db.profile.specialty].filter(Boolean).join(' – '), college: db.profile.college }),
     startDate: () => db.profile.joinDate || '',
     reviewerRole: 'Guide',
@@ -339,12 +343,14 @@
     ['Research', [['thesis', 'Thesis'], ['presentations', 'Presentations'], ['publications', 'Publications']]],
     ['Assessment', [['wpba', 'Workplace assessments'], ['appraisals', 'Periodic appraisal']]],
     ['Training', [['postings', 'Postings & DRP'], ['leave', 'Leave'], ['courses', 'Courses'], ['mentor', 'Mentor meetings'], ['reflections', 'Reflections']]],
-    ['Logbook', [['report', 'Print logbook'], ['targets', 'Targets & backup'], ['rules', 'NMC rules']]]
+    ['Logbook', [['report', 'Print logbook'], ['targets', 'Backup & targets'], ['rules', 'NMC rules']]]
   ];
 
   function renderNav() {
     const cur = location.hash.replace(/^#\/?(c\/)?/, '').replace(/^settings$/, 'targets') || 'dashboard';
-    $('#nav').innerHTML = NAV_GROUPS.map(([g, items]) => `<div class="nav-h">${esc(g)}</div>` + items.map(([r, l]) => {
+    const groups = NAV_GROUPS.slice();
+    groups.splice(groups.length - 1, 0, ['My sections', [...CS.navItems(), ['my-sections', '+ Add or manage']]]);
+    $('#nav').innerHTML = groups.map(([g, items]) => `<div class="nav-h">${esc(g)}</div>` + items.map(([r, l]) => {
       const n = S[r] ? list(r).length : '';
       return `<a href="#${r}" class="${cur === r ? 'active' : ''}"${cur === r ? ' aria-current="page"' : ''}><span>${esc(l)}</span>${n !== '' ? `<span class="badge">${n}</span>` : ''}</a>`;
     }).join('')).join('') + (FRAMED ? '' : '<a href="mbbs/index.html" class="switch"><span>MBBS (UG) logbook →</span></a>');
@@ -354,7 +360,9 @@
     const h = location.hash.replace(/^#\/?(c\/)?/, '').replace(/^settings$/, 'targets') || 'dashboard';
     const main = $('#main');
     document.body.classList.remove('nav-open');
+    CS.sync();
     if (S[h]) renderCollection(h);
+    else if (h === 'my-sections') CS.render();
     else if (h === 'profile') renderSingle('profile', 'Student Profile', PROFILE_FIELDS, 'These details appear on the cover page of your printed logbook.');
     else if (h === 'thesis') renderSingle('thesis', 'Thesis / Dissertation', THESIS_FIELDS, thesisHelp());
     else if (h === 'report') renderReport();
@@ -700,7 +708,21 @@
     const num = (n, l, h = '') => `<label class="field"><span>${esc(l)}</span><input type="number" min="0" name="${n}" value="${t[n]}">${h ? `<small>${esc(h)}</small>` : ''}</label>`;
     const procs = procedureOptions();
     $('#main').innerHTML = `
-      <h1>Targets & backup</h1>
+      <h1>Backup & targets</h1>
+      <div class="card">
+        <h3>Backup & restore</h3>
+        ${FRAMED ? '<p class="warn">This preview page cannot save files. Export, import and CSV work in the installed app.</p>' : ''}
+        <p class="help">Your logbook is saved on this phone automatically. To keep a safe copy, back it up to your own Google Drive, or send it to yourself on WhatsApp or email. Nobody else can see it.</p>
+        <div class="actions left">
+          <button class="btn primary" id="exp">Back up to Drive, WhatsApp or email</button>
+          <button class="btn" id="expDl">Download backup file</button>
+          <label class="btn" for="imp">Restore from a backup<input type="file" id="imp" accept="${window.ElogBackup.ACCEPT}" hidden></label>
+          <button class="btn" id="csvAll">Export all as CSV</button>
+          <button class="btn danger" id="wipe">Erase all data</button>
+        </div>
+        <p class="muted small">To restore on a new phone: install the app, tap <b>Restore from a backup</b> and pick the file. On Android you can open it straight from Google Drive.</p>
+        <p class="muted">Last backup: ${db.lastBackup ? fmtDate(db.lastBackup.slice(0, 10)) : 'never'}</p>
+      </div>
       <form id="tf" class="card">
         <h3>Course targets</h3>
         <p class="help">Defaults follow PGMER-2023. Your university or department may prescribe more — change them here.</p>
@@ -729,18 +751,7 @@
         </div>
         <div class="actions"><button class="btn primary">Save targets</button></div>
       </form>
-      <div class="card">
-        <h3>Backup & restore</h3>
-        ${FRAMED ? '<p class="warn">This preview page cannot save files. Export, import and CSV work in the installed app.</p>' : ''}
-        <p class="help">Your logbook is stored only in this browser on this device. Export a backup regularly (and before changing phones), and keep it on Google Drive / email.</p>
-        <div class="actions left">
-          <button class="btn primary" id="exp">Export backup (.json)</button>
-          <label class="btn">Import backup<input type="file" id="imp" accept="application/json,.json" hidden></label>
-          <button class="btn" id="csvAll">Export all as CSV</button>
-          <button class="btn danger" id="wipe">Erase all data</button>
-        </div>
-        <p class="muted">Last backup: ${db.lastBackup ? fmtDate(db.lastBackup.slice(0, 10)) : 'never'}</p>
-      </div>`;
+`;
     $('#tf').addEventListener('submit', (e) => {
       e.preventDefault();
       const f = e.target;
@@ -750,7 +761,8 @@
       save();
       toast('Targets saved');
     });
-    $('#exp').onclick = exportJSON;
+    $('#exp').onclick = () => exportJSON(true);
+    $('#expDl').onclick = () => exportJSON(false);
     $('#imp').onchange = importJSON;
     $('#csvAll').onclick = () => Object.keys(S).forEach((k, i) => list(k).length && setTimeout(() => exportCSV(k), i * 300));
     $('#wipe').onclick = () => {
@@ -772,11 +784,18 @@
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   }
   function fileSlug() { return (db.profile.name || 'pg').replace(/[^a-z0-9]+/gi, '_').toLowerCase(); }
-  function exportJSON() {
-    db.lastBackup = new Date().toISOString();
-    save();
-    download(`elogbook_${fileSlug()}_${today()}.json`, JSON.stringify(db, null, 2), 'application/json');
-    toast('Backup downloaded');
+  function exportJSON(viaShare) {
+    const name = `pg_logbook_backup_${fileSlug()}_${today()}`;
+    const text = JSON.stringify(db);
+    const done = (how) => {
+      if (how === 'cancelled') return;
+      db.lastBackup = new Date().toISOString();
+      save();
+      toast(how === 'shared' ? 'Backup sent' : 'Backup file saved to Downloads');
+      if ((location.hash || '').includes('targets')) renderSettings();
+    };
+    if (viaShare) window.ElogBackup.save(name, text, 'PG logbook backup').then(done);
+    else done(window.ElogBackup.download(new File([text], name + '.txt', { type: 'text/plain' })));
   }
   function importJSON(e) {
     const file = e.target.files[0];
@@ -814,7 +833,7 @@
     const p = db.profile;
     const th = db.thesis;
     const prof = PROFILE_FIELDS.filter((f) => p[f.n]).map((f) => `<tr><th>${esc(f.l)}</th><td>${esc(f.t === 'date' ? fmtDate(p[f.n]) : p[f.n])}</td></tr>`).join('');
-    const order = ['postings', 'cases', 'procedures', 'academics', 'presentations', 'publications', 'conferences', 'courses', 'wpba', 'appraisals', 'mentor', 'reflections', 'leave'];
+    const order = ['postings', 'cases', 'procedures', 'academics', 'presentations', 'publications', 'conferences', 'courses', 'wpba', 'appraisals', 'mentor', 'reflections', 'leave', ...Object.keys(S).filter(CS.isCustom)];
     const section = (key) => {
       const rows = list(key).slice().sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
       const sc = S[key];

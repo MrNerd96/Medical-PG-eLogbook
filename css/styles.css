@@ -356,6 +356,21 @@ table.rep.sheet-kv td { width: 35%; }
 .sheet-lines div { border-bottom: 1px solid #999; height: 1.8rem; }
 .sheet-foot { margin-top: 1.5rem; color: #444; }
 
+/* ---------- My sections ---------- */
+.cs-templates { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: .6rem; margin-bottom: 1rem; }
+.cs-tpl { flex-direction: column; align-items: flex-start; text-align: left; gap: .2rem; padding: .75rem .9rem; }
+.cs-tpl small { font-weight: 400; font-size: .78rem; line-height: 1.35; }
+.cs-form { display: grid; gap: .8rem; }
+.cs-form h3 { margin: .6rem 0 0; }
+.cs-field { border: 1px solid var(--rule); border-radius: var(--r); padding: .7rem .8rem; display: grid; gap: .55rem; background: var(--paper); }
+.cs-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: .6rem; }
+@media (max-width: 480px) { .cs-row { grid-template-columns: minmax(0, 1fr); } }
+.cs-opts { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem 1.2rem; }
+.cs-move { margin-left: auto; display: flex; gap: .35rem; }
+.cs-hidden { border-top: 1px dashed var(--rule); padding-top: .6rem; display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+.cs-hidden p { flex-basis: 100%; margin: 0; }
+#csOut { font-family: var(--f-mono); font-size: .8rem; margin-bottom: .6rem; }
+
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 
 @media print {

@@ -1,6 +1,6 @@
 // Service worker: caches the app shell so the logbook works fully offline.
-const CACHE = 'pg-elogbook-v5';
-const ASSETS = ['./', './index.html', './css/styles.css', './js/data.js', './js/app.js', './js/theme.js', './js/review.js', './manifest.webmanifest', './icons/icon.svg',
+const CACHE = 'pg-elogbook-v6';
+const ASSETS = ['./', './index.html', './css/styles.css', './js/data.js', './js/app.js', './js/theme.js', './js/review.js', './js/custom.js', './js/backup.js', './manifest.webmanifest', './icons/icon.svg',
   './mbbs/', './mbbs/index.html', './mbbs/js/ug-data.js', './mbbs/js/ug-app.js', './mbbs/manifest.webmanifest',
   './fonts/IBMPlexSans-var.woff2', './fonts/IBMPlexMono-400.woff2', './fonts/IBMPlexMono-500.woff2'];
 
