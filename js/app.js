@@ -270,6 +270,39 @@
     { n: 'email', l: 'Email', t: 'text' }
   ];
 
+  // ---------- Guide sign-off sheets (print and sign) ----------
+  const LABEL = {
+    cases: (r) => `${r.diagnosis}${r.setting ? ' (' + r.setting + ')' : ''}`,
+    procedures: (r) => `${r.procedure}${r.level ? ' — ' + r.level : ''}`,
+    academics: (r) => `${r.type}: ${r.topic}${r.role ? ' (' + r.role + ')' : ''}`,
+    presentations: (r) => `${r.type}: ${r.title} — ${r.event}`,
+    publications: (r) => `${r.title} — ${r.journal} (${r.status})`,
+    conferences: (r) => `${r.type || 'Event'}: ${r.name}`,
+    wpba: (r) => `${r.tool}: ${r.topic}${r.score ? ' — ' + r.score : ''}`,
+    appraisals: (r) => `Periodic appraisal: ${r.period}`,
+    postings: (r) => `${r.type}: ${r.dept} (${fmtDate(r.from)} to ${fmtDate(r.to)})`,
+    leave: (r) => `${r.type || 'Leave'}: ${fmtDate(r.from)} to ${fmtDate(r.to)}`,
+    courses: (r) => r.course,
+    mentor: (r) => `Mentor meeting${r.mentor ? ' with ' + r.mentor : ''}`,
+    reflections: (r) => `Reflection: ${r.title}`
+  };
+  const SO = window.SignOff({
+    db: () => db, save, toast, askConfirm, modal, closeModal, FRAMED,
+    onChange: () => renderNav(),
+    sections: Object.keys(S).map((key) => ({ key, title: S[key].title })),
+    list,
+    entryDate: (key, r) => r.date || r.from || '',
+    entryLabel: (key, r) => (LABEL[key] ? LABEL[key](r) : r.title || ''),
+    student: () => ({ name: db.profile.name, line: [db.profile.degree, db.profile.specialty].filter(Boolean).join(' – '), college: db.profile.college }),
+    startDate: () => db.profile.joinDate || '',
+    reviewerRole: 'Guide',
+    defaultReviewer: () => db.profile.guide || '',
+    sheetTitle: 'PG e-logbook · Guide sign-off sheet',
+    sheetFoot: 'PGMER-2023 clause 5.2(vii): the post-graduate guide assesses and authenticates the e-log book monthly.',
+    ruleNote: 'PGMER-2023 (clause 5.2 vii) asks your guide to assess and authenticate your e-logbook every month. Print a sheet for any dates you like, get it signed on paper, and record it here.',
+    ruleShort: 'PGMER-2023: your guide authenticates the logbook monthly. This shows which months have a signed sheet.'
+  });
+
   // ---------- Derived values ----------
   function derived(key, r, col) {
     if (col === 'days') return daysBetween(r.from, r.to) || '';
@@ -300,7 +333,7 @@
 
   // ---------- Router ----------
   const NAV_GROUPS = [
-    ['Overview', [['dashboard', 'Dashboard'], ['profile', 'Profile']]],
+    ['Overview', [['dashboard', 'Dashboard'], ['signoff', 'Sign-off sheets'], ['profile', 'Profile']]],
     ['Clinical', [['cases', 'Clinical cases'], ['procedures', 'Procedures & skills']]],
     ['Academic', [['academics', 'Academic activities'], ['conferences', 'Conferences & CMEs']]],
     ['Research', [['thesis', 'Thesis'], ['presentations', 'Presentations'], ['publications', 'Publications']]],
@@ -325,6 +358,7 @@
     else if (h === 'profile') renderSingle('profile', 'Student Profile', PROFILE_FIELDS, 'These details appear on the cover page of your printed logbook.');
     else if (h === 'thesis') renderSingle('thesis', 'Thesis / Dissertation', THESIS_FIELDS, thesisHelp());
     else if (h === 'report') renderReport();
+    else if (h === 'signoff') { SO.reset(); SO.render(); }
     else if (h === 'targets') renderSettings();
     else if (h === 'rules') renderRules();
     else renderDashboard();
@@ -570,22 +604,6 @@
     return `<div class="meter"><div class="meter-top"><span>${esc(label)}</span><b class="${ok === true ? 'okt' : ok === false ? 'badt' : ''}">${got}${target ? ' / ' + target : ''}</b></div>
       <div class="track"><div class="fill ${ok ? 'ok' : ''}" style="width:${pct}%"></div></div>${sub ? `<small>${sub}</small>` : ''}</div>`;
   }
-  function monthlyStats(n) {
-    const out = [];
-    const all = Object.keys(S).flatMap((k) => list(k));
-    const d = new Date();
-    for (let i = 0; i < n; i++) {
-      const m = new Date(d.getFullYear(), d.getMonth() - i, 1);
-      const key = `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, '0')}`;
-      const rows = all.filter((r) => (r.created || '').slice(0, 7) === key);
-      out.push({ key, label: m.toLocaleString('en-IN', { month: 'short', year: 'numeric' }), total: rows.length, ver: rows.filter((r) => r.status === 'Verified').length });
-    }
-    return out;
-  }
-  function monthlyTable() {
-    return `<table class="data compact"><thead><tr><th>Month</th><th>Entries</th><th>Verified</th><th></th></tr></thead><tbody>${monthlyStats(6).map((m) =>
-      `<tr><td>${m.label}</td><td>${m.total}</td><td>${m.ver}</td><td>${!m.total ? '<span class="pill pend">No entries</span>' : m.ver === m.total ? '<span class="pill ok">✓ Authenticated</span>' : '<span class="pill pend">Pending</span>'}</td></tr>`).join('')}</tbody></table>`;
-  }
   function renderDashboard() {
     const p = db.profile;
     const t = db.targets;
@@ -601,7 +619,6 @@
     const leaveIn = (type) => list('leave').filter((l) => l.type === type && l.to >= yStart && l.from < yEnd)
       .reduce((s, l) => s + Math.max(0, daysBetween(l.from < yStart ? yStart : l.from, l.to >= yEnd ? new Date(new Date(yEnd + 'T00:00:00') - 86400000 + 43200000).toISOString().slice(0, 10) : l.to)), 0);
     const all = Object.keys(S).flatMap((k) => list(k));
-    const stale = all.filter((r) => r.status !== 'Verified' && r.created && (Date.now() - new Date(r.created)) / 86400000 > 31).length;
     const lastEntry = all.reduce((m, r) => (r.created && r.created > m ? r.created : m), '');
     const drp = list('postings').filter((r) => /DRP/.test(r.type)).reduce((s, r) => s + daysBetween(r.from, r.to), 0);
     const att = attendance();
@@ -620,7 +637,7 @@
     }
     if (missingCourses.length) alerts.push(`Mandatory course(s) not yet recorded: <b>${missingCourses.map((c) => esc(c.name)).join(', ')}</b>. <a href="#courses">Add</a>`);
     if (p.joinDate && (!lastEntry || (Date.now() - new Date(lastEntry)) / 86400000 > 7)) alerts.push('No logbook entry in the last 7 days — PGMER-2023 expects the e-logbook to be <b>updated weekly</b>.');
-    if (stale) alerts.push(`<b>${stale}</b> entr${stale > 1 ? 'ies are' : 'y is'} more than a month old and still unverified — your guide must <b>authenticate the logbook monthly</b>.`);
+    alerts.push(...SO.dueAlerts());
     if (p.joinDate && leaveIn('Casual leave') > t.casualLeave) alerts.push(`Casual leave this year: <b>${leaveIn('Casual leave')}</b> days — exceeds the ${t.casualLeave}-day entitlement (excess extends tenure).`);
     if (p.joinDate && leaveIn('Academic leave') > t.academicLeave) alerts.push(`Academic leave this year: <b>${leaveIn('Academic leave')}</b> days — exceeds the ${t.academicLeave}-day entitlement.`);
     if (att && att.pct < t.attendancePct) alerts.push(`Attendance is <b>${att.pct.toFixed(1)}%</b> — below the ${t.attendancePct}% minimum.`);
@@ -657,10 +674,7 @@
           ${bar('Periodic appraisals', cnt('appraisals'), t.appraisals)}
           ${p.joinDate ? `<p class="muted">Leave in year ${yr + 1}: casual ${leaveIn('Casual leave')}/${t.casualLeave} · academic ${leaveIn('Academic leave')}/${t.academicLeave}</p>` : ''}
         </div>
-        <div class="card"><h3>Monthly guide authentication</h3>
-          <p class="help">PGMER-2023: update weekly, guide authenticates monthly.</p>
-          ${monthlyTable()}
-        </div>
+        ${SO.dashboardCard()}
         <div class="card"><h3>Thesis milestones</h3>
           <ol class="steps">${thesisSteps.map(([l, d]) => `<li class="${d ? 'done' : ''}"><span>${d ? '✓' : ''}</span>${esc(l)}${d ? ` <small>${fmtDate(d)}</small>` : ''}</li>`).join('')}</ol>
           <a class="btn sm" href="#thesis">Update thesis</a>
@@ -828,6 +842,7 @@
           <table class="rep kv">${THESIS_FIELDS.filter((f) => th[f.n]).map((f) => `<tr><th>${esc(f.l)}</th><td>${esc(f.t === 'date' ? fmtDate(th[f.n]) : th[f.n])}</td></tr>`).join('') || '<tr><td>Not entered.</td></tr>'}</table>
         </section>
         ${order.map(section).join('')}
+        ${SO.reportSection()}
         <section class="rep-sec cert">
           <h2>Certificate</h2>
           <p>This is to certify that Dr. <b>${esc(p.name || '______________________')}</b>, ${esc(p.degree || '___')} (${esc(p.specialty || '____________')}) student of ${esc(p.college || '____________________')}, has maintained this logbook during the course period (${p.joinDate ? fmtDate(p.joinDate) + ' to ' + fmtDate(addMonths(p.joinDate, db.targets.courseMonths)) : '__________'}). The entries are a true record of the work done, and the student has satisfactorily completed the postgraduate training requirements as per NMC PGMER-2023.</p>

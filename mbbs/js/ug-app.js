@@ -232,6 +232,41 @@
     { n: 'email', l: 'Email (optional)', t: 'text' }
   ];
 
+  // ---------- Faculty sign-off sheets (print and sign) ----------
+  const LABEL = {
+    comp: (r) => `${r.code} ${r.activity}${r.decision ? ' — ' + r.decision : ''}`,
+    foundation: (r) => `${r.module}${r.attended === 'No' ? ' (absent)' : ''}`,
+    aetcom: (r) => `AETCOM ${r.module}: ${r.topic}`,
+    ece: (r) => `${r.type}: ${r.topic}`,
+    families: (r) => `Family ${r.code} adopted: ${r.head}`,
+    visits: (r) => `Family visit ${r.family || ''}: ${r.purpose || ''}${r.attended === 'No' ? ' (absent)' : ''}`,
+    postings: (r) => `${subjName(r.subject)} posting ${fmtDate(r.from)} to ${fmtDate(r.to)}${r.attPct ? ' — ' + r.attPct + '%' : ''}`,
+    cases: (r) => `${subjName(r.subject)}: ${r.diagnosis}`,
+    electives: (r) => `${r.block}: ${r.name}`,
+    ia: (r) => `${subjName(r.subject)} ${r.kind} ${r.exam || ''}: ${r.marks}/${r.max}`,
+    attendance: (r) => `${r.subject ? subjName(r.subject) + ' ' : ''}${r.component}: ${r.attended}/${r.held}`,
+    activities: (r) => `${r.type}: ${r.title}`
+  };
+  const SO = window.SignOff({
+    db: () => db, save, toast, askConfirm, modal, closeModal, FRAMED,
+    onChange: () => renderNav(),
+    sections: Object.keys(S).map((key) => ({ key, title: S[key].title })),
+    list,
+    entryDate: (key, r) => r.date || r.from || r.asOf || r.adopted || '',
+    entryLabel: (key, r) => (LABEL[key] ? LABEL[key](r) : r.title || ''),
+    subjects: () => Object.entries(U.SUBJECTS).map(([v, l]) => ({ v, l })),
+    subjectOf: (key, r) => r.subject || '',
+    subjectName: (c) => subjName(c),
+    student: () => ({ name: db.profile.name, line: `MBBS · ${phaseById(curPhase()).name}${db.profile.batch ? ' · Batch ' + db.profile.batch : ''}`, college: db.profile.college }),
+    startDate: () => db.profile.admission || '',
+    reviewerRole: 'Faculty in charge',
+    defaultReviewer: () => '',
+    sheetTitle: 'MBBS e-logbook · Faculty sign-off sheet',
+    sheetFoot: 'NMC logbook guidelines: the student is responsible for getting entries verified by the faculty in charge regularly; the HOD scrutinises the logbook.',
+    ruleNote: 'NMC asks you to get your logbook entries verified by the faculty in charge regularly. Print a sheet for any dates (and, if you like, one subject), get it signed, and record it here.',
+    ruleShort: 'Shows which months have a signed sheet. A reminder only; any dates and subjects can go on a sheet.'
+  });
+
   // ---------- Cell rendering ----------
   function cellValue(key, r, col) {
     const f = S[key].fields.find((x) => x.n === col) || {};
@@ -255,7 +290,7 @@
 
   // ---------- Navigation ----------
   const NAV_GROUPS = [
-    ['Overview', [['dashboard', 'Dashboard'], ['profile', 'Profile']]],
+    ['Overview', [['dashboard', 'Dashboard'], ['signoff', 'Sign-off sheets'], ['profile', 'Profile']]],
     ['Learning', [['comp', 'Competency log'], ['aetcom', 'AETCOM'], ['activities', 'Other activities']]],
     ['Phase I', [['foundation', 'Foundation Course'], ['ece', 'Early clinical exposure']]],
     ['Family Adoption', [['families', 'Adopted families'], ['visits', 'Family visits']]],
@@ -276,6 +311,7 @@
     if (S[h]) renderCollection(h);
     else if (h === 'profile') renderProfile();
     else if (h === 'print-logbook') renderReport();
+    else if (h === 'signoff') { SO.reset(); SO.render(); }
     else if (h === 'targets') renderSettings();
     else if (h === 'rules') renderRules();
     else renderDashboard();
@@ -506,8 +542,7 @@
     if (list('families').length < t.fapFamiliesMin) alerts.push(`Only ${list('families').length} adopted families recorded. NMC requires at least ${t.fapFamiliesMin} (${t.fapFamiliesPreferred} preferred).`);
     const fc = foundationPct();
     if (ph === 'P1' && fc != null && fc < 75) alerts.push(`Foundation Course attendance is <b>${fc.toFixed(1)}%</b>, below the mandatory 75%.`);
-    const stale = all.filter((r) => r.status !== 'Verified' && r.created && (Date.now() - new Date(r.created)) / 86400000 > 31).length;
-    if (stale) alerts.push(`${stale} entr${stale > 1 ? 'ies are' : 'y is'} over a month old and still unverified. Ask the faculty in charge to verify them.`);
+    alerts.push(...SO.dueAlerts());
     if (!db.sample && (!db.lastBackup || (Date.now() - new Date(db.lastBackup)) / 86400000 > 14)) alerts.push('Export a backup: your logbook lives only on this device. <a href="#targets">Backup</a>');
 
     const elected = list('electives');
@@ -540,6 +575,7 @@
           ${ph !== 'P1' ? meter('Clinical postings recorded', list('postings').filter((r) => r.phase === ph).length, 0) + meter('Case records written', list('cases').length, 0) : ''}
           ${meter('Competency activities logged (this phase)', compStats('', ph).entries, 0)}
         </div>
+        ${SO.dashboardCard()}
       </div>`;
     if ($('#startFresh')) $('#startFresh').onclick = () => askConfirm('Start your own logbook?', 'The sample entries will be removed so you can enter your own details.', 'Remove sample data', () => { db = blankDB(); save(); location.hash = '#profile'; route(); });
     $('#main').querySelectorAll('[data-add]').forEach((b) => (b.onclick = () => { location.hash = '#' + b.dataset.add; setTimeout(() => openEntry(b.dataset.add), 0); }));
@@ -653,6 +689,7 @@
           <p class="small">Prepared as per NMC Guidelines for preparing Logbook (UG) and the CBME Curriculum 2024. Generated on ${fmtDate(today())}.</p>
         </div>
         ${sections.map(([h, body]) => `<section class="rep-sec"><h2>${esc(h)}</h2>${body}</section>`).join('')}
+        ${SO.reportSection()}
         <section class="rep-sec"><h2>Final summary</h2>
           <table class="rep"><thead><tr><th>#</th><th>Description</th><th>Attendance % (theory / practical)</th><th>Status (complete / incomplete)</th><th class="sig">Signature of teacher</th></tr></thead>
           <tbody>${summaryRows.map(([d, a], i) => `<tr><td>${i + 1}</td><td>${esc(d)}</td><td>${esc(a)}</td><td></td><td></td></tr>`).join('')}</tbody></table>
