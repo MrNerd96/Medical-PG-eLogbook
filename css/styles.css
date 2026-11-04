@@ -81,6 +81,13 @@ small, .muted { color: var(--ink-2); }
   margin-left: auto; font: 500 .7rem/1 var(--f-mono); letter-spacing: .04em; text-transform: uppercase;
   color: var(--accent); border: 1px solid var(--accent); padding: .3rem .5rem; border-radius: 3px;
 }
+.theme-btn {
+  border: 1px solid var(--rule-strong); background: var(--sheet); color: var(--ink); border-radius: 4px; cursor: pointer;
+  font: 500 .8rem/1 var(--f-sans); padding: .45rem .6rem; min-height: 34px; white-space: nowrap;
+}
+.theme-btn:hover { border-color: var(--accent); }
+.theme-btn span { color: var(--accent); }
+@media (max-width: 440px) { .tag { display: none; } .theme-btn { margin-left: auto; } }
 .icon-btn { display: none; border: 0; background: none; font-size: 1.35rem; color: var(--ink); cursor: pointer; padding: .25rem; }
 .layout { display: grid; grid-template-columns: 236px minmax(0, 1fr); min-height: calc(100vh - var(--topbar-h)); }
 
