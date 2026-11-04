@@ -1,7 +1,8 @@
 // Service worker: caches the app shell so the logbook works fully offline.
-const CACHE = 'pg-elogbook-v2';
+const CACHE = 'pg-elogbook-v3';
 const ASSETS = ['./', './index.html', './css/styles.css', './js/data.js', './js/app.js', './manifest.webmanifest', './icons/icon.svg',
-  './mbbs/', './mbbs/index.html', './mbbs/js/ug-data.js', './mbbs/js/ug-app.js', './mbbs/manifest.webmanifest'];
+  './mbbs/', './mbbs/index.html', './mbbs/js/ug-data.js', './mbbs/js/ug-app.js', './mbbs/manifest.webmanifest',
+  './fonts/IBMPlexSans-var.woff2', './fonts/IBMPlexMono-400.woff2', './fonts/IBMPlexMono-500.woff2'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));

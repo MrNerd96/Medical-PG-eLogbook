@@ -243,6 +243,8 @@
     if (f.t === 'date') return fmtDate(r[col]);
     return r[col];
   }
+  const MONO = ['code', 'pid', 'module', 'family', 'attempt', 'rating', 'decision', 'result', 'attPctCalc', 'attPct', 'eopScore', 'members'];
+  const isMono = (key, col) => MONO.includes(col) || (S[key].fields.find((f) => f.n === col) || {}).t === 'date';
   function colLabel(key, col) {
     if (col === 'result') return 'Marks';
     if (col === 'attPctCalc') return 'Attendance';
@@ -252,17 +254,21 @@
   const sortKey = (r) => r.date || r.from || r.asOf || r.adopted || '';
 
   // ---------- Navigation ----------
-  const NAV = [
-    ['dashboard', '🏠', 'Dashboard'], ['profile', '👤', 'Profile'],
-    ...['comp', 'aetcom', 'activities', 'foundation', 'ece', 'families', 'visits', 'postings', 'cases', 'electives', 'ia', 'attendance'].map((k) => [k, S[k].icon, S[k].title]),
-    ['print-logbook', '🖨️', 'Print Logbook'], ['targets', '⚙️', 'Targets & Backup'], ['rules', '📜', 'NMC Rules']
+  const NAV_GROUPS = [
+    ['Overview', [['dashboard', 'Dashboard'], ['profile', 'Profile']]],
+    ['Learning', [['comp', 'Competency log'], ['aetcom', 'AETCOM'], ['activities', 'Other activities']]],
+    ['Phase I', [['foundation', 'Foundation Course'], ['ece', 'Early clinical exposure']]],
+    ['Family Adoption', [['families', 'Adopted families'], ['visits', 'Family visits']]],
+    ['Clinical', [['postings', 'Clinical postings'], ['cases', 'Case records'], ['electives', 'Electives']]],
+    ['Assessment', [['ia', 'Internal assessment'], ['attendance', 'Attendance']]],
+    ['Logbook', [['print-logbook', 'Print logbook'], ['targets', 'Targets & backup'], ['rules', 'NMC rules']]]
   ];
   function renderNav() {
     const cur = location.hash.replace(/^#\/?/, '') || 'dashboard';
-    $('#nav').innerHTML = NAV.map(([r, i, l]) => {
+    $('#nav').innerHTML = NAV_GROUPS.map(([g, items]) => `<div class="nav-h">${esc(g)}</div>` + items.map(([r, l]) => {
       const n = S[r] ? list(r).length : '';
-      return `<a href="#${r}" class="${cur === r ? 'active' : ''}"><span class="ni">${i}</span><span>${esc(l)}</span>${n !== '' ? `<span class="badge">${n}</span>` : ''}</a>`;
-    }).join('') + '<a href="../index.html" class="switch"><span class="ni">↗</span><span>PG (MD/MS) logbook</span></a>';
+      return `<a href="#${r}" class="${cur === r ? 'active' : ''}"${cur === r ? ' aria-current="page"' : ''}><span>${esc(l)}</span>${n !== '' ? `<span class="badge">${n}</span>` : ''}</a>`;
+    }).join('')).join('') + (FRAMED ? '' : '<a href="../index.html" class="switch"><span>PG (MD/MS) logbook →</span></a>');
   }
   function route() {
     const h = location.hash.replace(/^#\/?/, '') || 'dashboard';
@@ -315,7 +321,7 @@
     const pending = rows.filter((r) => r.status !== 'Verified').length;
     const extra = key === 'comp' ? compSummary() : key === 'visits' ? visitSummary() : key === 'aetcom' ? aetcomSummary() : '';
     $('#main').innerHTML = `
-      <div class="head-row"><h1>${sc.icon} ${esc(sc.title)}</h1><div class="head-actions"><button class="btn primary" id="addBtn">+ Add entry</button></div></div>
+      <div class="head-row"><h1>${esc(sc.title)}</h1><div class="head-actions"><button class="btn primary" id="addBtn">+ Add entry</button></div></div>
       <p class="help">${esc(sc.help)}</p>
       ${key === 'visits' && !list('families').length ? '<p class="warn">Add your adopted families first under <a href="#families">Adopted Families</a>.</p>' : ''}
       ${extra}
@@ -329,7 +335,7 @@
         ${FRAMED ? '' : `<button class="btn" id="csv" ${rows.length ? '' : 'disabled'}>Export CSV</button>`}
       </div>
       ${shown.length ? `<div class="table-wrap"><table class="data"><thead><tr>${sc.cols.map((c) => `<th>${esc(colLabel(key, c))}</th>`).join('')}<th>Status</th><th></th></tr></thead>
-        <tbody>${shown.map((r) => `<tr data-id="${r.id}">${sc.cols.map((c) => `<td data-label="${esc(colLabel(key, c))}">${esc(cellValue(key, r, c))}</td>`).join('')}
+        <tbody>${shown.map((r) => `<tr data-id="${r.id}">${sc.cols.map((c) => `<td data-label="${esc(colLabel(key, c))}"${isMono(key, c) ? ' class="mono"' : ''}>${esc(cellValue(key, r, c))}</td>`).join('')}
           <td data-label="Status">${statusPill(r)}</td>
           <td class="row-actions"><button class="btn sm" data-act="edit">Edit</button>${r.status === 'Verified' ? '' : '<button class="btn sm" data-act="verify">Verify</button>'}<button class="btn sm danger" data-act="del" aria-label="Delete">✕</button></td></tr>`).join('')}
         </tbody></table></div>` : '<div class="empty card">No entries yet. Tap <b>+ Add entry</b> to start.</div>'}`;
@@ -509,13 +515,13 @@
     $('#main').innerHTML = `
       ${db.sample ? `<div class="card sample-note"><div><b>You are looking at sample data.</b> Rahul Verma is a made-up Phase II MBBS student. Explore freely; nothing here is real.</div><button class="btn" id="startFresh">Start my own logbook</button></div>` : ''}
       <div class="hero card">
-        <div><h1>${p.name ? esc(p.name) : 'Welcome 👋'}</h1>
+        <div><h1>${p.name ? esc(p.name) : 'Your logbook'}</h1>
           <p>MBBS · ${esc(P.name)}${p.batch ? ' · Batch ' + esc(p.batch) : ''}${p.college ? ' · ' + esc(p.college) : ''}</p>
           <p class="muted">Exam subjects this phase: ${P.exam.map(subjName).map(esc).join(', ')}</p></div>
         <div class="hero-stats"><div><b>${all.length}</b><span>entries</span></div><div><b>${all.length - pending}</b><span>verified</span></div><div><b>${pending}</b><span>pending</span></div></div>
       </div>
       ${alerts.length ? `<div class="card alerts"><h3>Action needed</h3><ul>${alerts.map((a) => `<li>${a}</li>`).join('')}</ul></div>` : ''}
-      <div class="quick">${['comp', 'aetcom', 'visits', 'cases'].map((k) => `<button class="btn quick-btn" data-add="${k}">${S[k].icon}<span>+ ${esc(S[k].title.split(' ')[0])}</span></button>`).join('')}</div>
+      <div class="quick">${['comp', 'aetcom', 'visits', 'cases'].map((k) => `<button class="btn quick-btn" data-add="${k}">${esc({ comp: 'Competency', aetcom: 'AETCOM session', visits: 'Family visit', cases: 'Case record' }[k])}</button>`).join('')}</div>
       <h2 class="sec-h">University exam eligibility: ${esc(P.name)}</h2>
       <div class="grid2">${elig.map((e) => `<div class="card elig ${e.status}"><div class="elig-head"><h3>${esc(subjName(e.s))}</h3><span class="pill ${e.status === 'ok' ? 'ok' : e.status === 'bad' ? 'bad' : 'pend'}">${e.status === 'ok' ? '✓ On track' : e.status === 'bad' ? 'At risk' : 'Incomplete data'}</span></div>
         <table class="data compact"><tbody>${e.checks.map(([l, v, st]) => `<tr><td>${esc(l)}</td><td class="num ${st === 'ok' ? 'okt' : st === 'bad' ? 'badt' : 'muted'}">${esc(v)}</td><td><span class="dot ${st}" title="${label[st]}"></span></td></tr>`).join('')}</tbody></table></div>`).join('')}</div>
@@ -543,7 +549,7 @@
   function renderSettings() {
     const t = db.targets;
     const subs = Object.keys(U.SUBJECTS);
-    $('#main').innerHTML = `<h1>⚙️ Targets & Backup</h1>
+    $('#main').innerHTML = `<h1>Targets & backup</h1>
       <form id="tf" class="card"><h3>Targets</h3><p class="help">Defaults follow NMC CBME 2024. Your college may set the number of certifiable competencies per subject.</p>
         <div class="form-grid">
           <label class="field" for="t_fm"><span>Minimum families (FAP)</span><input id="t_fm" type="number" min="0" name="fapFamiliesMin" value="${t.fapFamiliesMin}"></label>
@@ -635,7 +641,7 @@
     const summaryRows = [...(ph === 'P1' ? [['Foundation Course', fmtPct(foundationPct())], ['Early Clinical Exposure', '']] : []), ['AETCOM Module', fmtPct(aetcomPct(ph))], ['Family Adoption Programme', fmtPct(fapVisitPct())],
       ...P.teach.map((s) => [subjName(s), [latestAtt(ph, s, 'Theory'), latestAtt(ph, s, 'Practical / Clinical')].map(fmtPct).join(' / ')])];
     $('#main').innerHTML = `
-      <div class="no-print head-row"><h1>🖨️ Print Logbook</h1><div class="head-actions">
+      <div class="no-print head-row"><h1>Print logbook</h1><div class="head-actions">
         <select id="rph" aria-label="Phase to print">${U.PHASES.map((x) => `<option value="${x.id}" ${x.id === ph ? 'selected' : ''}>${x.name}</option>`).join('')}</select>
         ${FRAMED ? '<span class="pill pend">Printing works in the installed app</span>' : '<button class="btn primary" id="printBtn">Print / Save as PDF</button>'}</div></div>
       <p class="help no-print">NMC asks for one logbook per phase, submitted before the university exam. It follows the NMC table format (columns 1–8), with the final summary and the logbook certificate.</p>
@@ -662,7 +668,7 @@
 
   // ---------- Rules ----------
   function renderRules() {
-    $('#main').innerHTML = `<h1>📜 NMC rules this logbook follows</h1>
+    $('#main').innerHTML = `<h1>NMC rules this logbook follows</h1>
       <div class="card prose">
         <p class="help">From the NMC <b>Guidelines for preparing Logbook for the Undergraduate Medical Education Program</b> and the <b>Competency Based Medical Education (CBME) Curriculum 2024</b>, which applies from the 2024-25 batch. Your university's rules also apply.</p>
         <h3>The logbook</h3><ul>

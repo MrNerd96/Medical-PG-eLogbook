@@ -288,6 +288,8 @@
     if (col === 'days') return v ? `${v} d` : '';
     return v;
   }
+  const MONO = ['pid', 'level', 'days', 'avg', 'score', 'credits', 'cert'];
+  const isMono = (key, col) => MONO.includes(col) || (S[key].fields.find((f) => f.n === col) || {}).t === 'date';
   function colLabel(key, col) {
     if (col === 'days') return 'Days';
     if (col === 'avg') return 'Avg score';
@@ -297,23 +299,22 @@
   const sortKey = (r) => r.date || r.from || '';
 
   // ---------- Router ----------
-  const NAV = [
-    ['dashboard', '🏠', 'Dashboard'],
-    ['profile', '👤', 'Profile'],
-    ...['cases', 'procedures', 'academics'].map((k) => [k, S[k].icon, S[k].title]),
-    ['thesis', '🔬', 'Thesis'],
-    ...['presentations', 'publications', 'conferences', 'wpba', 'appraisals', 'postings', 'leave', 'courses', 'mentor', 'reflections'].map((k) => [k, S[k].icon, S[k].title]),
-    ['report', '🖨️', 'Print Logbook'],
-    ['targets', '⚙️', 'Targets & Backup'],
-    ['rules', '📜', 'NMC Rules']
+  const NAV_GROUPS = [
+    ['Overview', [['dashboard', 'Dashboard'], ['profile', 'Profile']]],
+    ['Clinical', [['cases', 'Clinical cases'], ['procedures', 'Procedures & skills']]],
+    ['Academic', [['academics', 'Academic activities'], ['conferences', 'Conferences & CMEs']]],
+    ['Research', [['thesis', 'Thesis'], ['presentations', 'Presentations'], ['publications', 'Publications']]],
+    ['Assessment', [['wpba', 'Workplace assessments'], ['appraisals', 'Periodic appraisal']]],
+    ['Training', [['postings', 'Postings & DRP'], ['leave', 'Leave'], ['courses', 'Courses'], ['mentor', 'Mentor meetings'], ['reflections', 'Reflections']]],
+    ['Logbook', [['report', 'Print logbook'], ['targets', 'Targets & backup'], ['rules', 'NMC rules']]]
   ];
 
   function renderNav() {
     const cur = location.hash.replace(/^#\/?(c\/)?/, '').replace(/^settings$/, 'targets') || 'dashboard';
-    $('#nav').innerHTML = NAV.map(([r, i, l]) => {
+    $('#nav').innerHTML = NAV_GROUPS.map(([g, items]) => `<div class="nav-h">${esc(g)}</div>` + items.map(([r, l]) => {
       const n = S[r] ? list(r).length : '';
-      return `<a href="#${r}" class="${cur === r ? 'active' : ''}"><span class="ni">${i}</span><span>${esc(l)}</span>${n !== '' ? `<span class="badge">${n}</span>` : ''}</a>`;
-    }).join('') + '<a href="mbbs/index.html" class="switch"><span class="ni">↗</span><span>MBBS (UG) logbook</span></a>';
+      return `<a href="#${r}" class="${cur === r ? 'active' : ''}"${cur === r ? ' aria-current="page"' : ''}><span>${esc(l)}</span>${n !== '' ? `<span class="badge">${n}</span>` : ''}</a>`;
+    }).join('')).join('') + (FRAMED ? '' : '<a href="mbbs/index.html" class="switch"><span>MBBS (UG) logbook →</span></a>');
   }
 
   function route() {
@@ -395,7 +396,7 @@
     const extra = key === 'courses' ? courseChecklist() : key === 'procedures' ? procedureSummary() : '';
     $('#main').innerHTML = `
       <div class="head-row">
-        <h1>${sc.icon} ${esc(sc.title)}</h1>
+        <h1>${esc(sc.title)}</h1>
         <div class="head-actions">
           <button class="btn primary" id="addBtn">+ Add entry</button>
         </div>
@@ -417,7 +418,7 @@
         <thead><tr>${sc.cols.map((c) => `<th>${esc(colLabel(key, c))}</th>`).join('')}<th>Status</th><th></th></tr></thead>
         <tbody>${shown.map((r) => `
           <tr data-id="${r.id}">
-            ${sc.cols.map((c) => `<td data-label="${esc(colLabel(key, c))}">${esc(cellValue(key, r, c))}</td>`).join('')}
+            ${sc.cols.map((c) => `<td data-label="${esc(colLabel(key, c))}"${isMono(key, c) ? ' class="mono"' : ''}>${esc(cellValue(key, r, c))}</td>`).join('')}
             <td data-label="Status">${statusPill(r)}</td>
             <td class="row-actions">
               <button class="btn sm" data-act="edit">Edit</button>
@@ -631,7 +632,7 @@
       ${db.sample ? `<div class="card sample-note"><div><b>You are looking at sample data.</b> Dr Ananya Rao is a made-up MS General Surgery student. Explore freely; nothing here is real.</div><button class="btn" id="startFresh">Start my own logbook</button></div>` : ''}
       <div class="hero card">
         <div>
-          <h1>${p.name ? esc(p.name) : 'Welcome 👋'}</h1>
+          <h1>${p.name ? esc(p.name) : 'Your logbook'}</h1>
           <p>${esc([p.degree, p.specialty].filter(Boolean).join(' – ') || 'Set up your profile to get started')}${p.college ? ' · ' + esc(p.college) : ''}</p>
           ${p.joinDate ? `<p class="muted">Joined ${fmtDate(p.joinDate)} · Semester ${sem} · Course ends ${fmtDate(addMonths(p.joinDate, t.courseMonths))}</p>` : ''}
         </div>
@@ -643,7 +644,7 @@
       </div>
       ${alerts.length ? `<div class="card alerts"><h3>Action needed</h3><ul>${alerts.map((a) => `<li>${a}</li>`).join('')}</ul></div>` : ''}
       <div class="quick">
-        ${['cases', 'procedures', 'academics', 'wpba'].map((k) => `<button class="btn quick-btn" data-add="${k}">${S[k].icon}<span>+ ${esc(S[k].title.split(' ')[0])}</span></button>`).join('')}
+        ${['cases', 'procedures', 'academics', 'wpba'].map((k) => `<button class="btn quick-btn" data-add="${k}">${esc({ cases: 'Case', procedures: 'Procedure', academics: 'Academic activity', wpba: 'Assessment' }[k])}</button>`).join('')}
       </div>
       <div class="grid2">
         <div class="card"><h3>PGMER-2023 requirements</h3>
@@ -685,7 +686,7 @@
     const num = (n, l, h = '') => `<label class="field"><span>${esc(l)}</span><input type="number" min="0" name="${n}" value="${t[n]}">${h ? `<small>${esc(h)}</small>` : ''}</label>`;
     const procs = procedureOptions();
     $('#main').innerHTML = `
-      <h1>⚙️ Targets & Backup</h1>
+      <h1>Targets & backup</h1>
       <form id="tf" class="card">
         <h3>Course targets</h3>
         <p class="help">Defaults follow PGMER-2023. Your university or department may prescribe more — change them here.</p>
@@ -813,7 +814,7 @@
       </section>`;
     };
     $('#main').innerHTML = `
-      <div class="no-print head-row"><h1>🖨️ Print Logbook</h1><div class="head-actions">${FRAMED ? '<span class="pill pend">Printing works in the installed app</span>' : '<button class="btn primary" id="printBtn">Print / Save as PDF</button>'}</div></div>
+      <div class="no-print head-row"><h1>Print logbook</h1><div class="head-actions">${FRAMED ? '<span class="pill pend">Printing works in the installed app</span>' : '<button class="btn primary" id="printBtn">Print / Save as PDF</button>'}</div></div>
       <p class="help no-print">Print this and get each page counter-signed by your guide/HOD during periodic reviews. Choose “Save as PDF” in the print dialog for a digital copy. Landscape works best.</p>
       <div class="report">
         <div class="rep-cover">
@@ -838,7 +839,7 @@
   // ---------- Rules page ----------
   function renderRules() {
     $('#main').innerHTML = `
-      <h1>📜 NMC rules this logbook follows</h1>
+      <h1>NMC rules this logbook follows</h1>
       <div class="card prose">
         <p class="help">Summary of requirements in the NMC <b>Post-Graduate Medical Education Regulations, 2023 (PGMER-2023)</b> and the NMC competency-based PG curriculum guidelines. Always check the latest NMC notifications and your university's regulations — they prevail.</p>
         <h3>Logbook</h3>
