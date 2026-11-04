@@ -111,10 +111,10 @@
     },
     presentations: {
       title: 'Paper & Poster Presentations', icon: '🎤', group: 'Research',
-      help: 'PGMER-2023: present at least one poster and one oral paper at a conference during the course.',
+      help: 'PGMER-2023: to be eligible for the final exam you need at least ONE of — a poster or a podium (oral) presentation at a national / zonal / state conference of your specialty, or a first-author research paper (see Publications). NMC clarified in Aug 2025 that this goes by specialty, so national/state IMA conferences also count.',
       fields: [
         { n: 'date', l: 'Date', t: 'date', req: 1 },
-        { n: 'type', l: 'Type', t: 'select', req: 1, o: opt(['Poster', 'Oral paper', 'E-poster', 'Invited talk', 'Quiz / Competition']) },
+        { n: 'type', l: 'Type', t: 'select', req: 1, o: opt(['Poster', 'Podium / oral paper', 'E-poster', 'Invited talk', 'Quiz / Competition']) },
         { n: 'title', l: 'Title', t: 'text', req: 1 },
         { n: 'event', l: 'Conference / event', t: 'text', req: 1 },
         { n: 'level', l: 'Level', t: 'select', o: opt(['Institutional', 'State', 'Zonal', 'National', 'International']) },
@@ -125,7 +125,7 @@
     },
     publications: {
       title: 'Publications', icon: '📄', group: 'Research',
-      help: 'PGMER-2023: at least one research paper published or accepted in an indexed journal.',
+      help: 'A research paper published / accepted in a journal of your specialty as FIRST author satisfies the PGMER-2023 research requirement (one of three options).',
       fields: [
         { n: 'title', l: 'Title', t: 'text', req: 1 },
         { n: 'journal', l: 'Journal', t: 'text', req: 1 },
@@ -178,7 +178,7 @@
     },
     postings: {
       title: 'Postings & DRP', icon: '🏥', group: 'Training',
-      help: 'Parent department units, rotational/elective postings and the mandatory 3-month District Residency Programme (DRP).',
+      help: 'Parent department units, rotational/elective postings and the mandatory 3-month District Residency Programme (DRP). Certification of satisfactory DRP completion is needed for the exam; the college reports DRP details to NMC within 1 week of completion.',
       fields: [
         { n: 'from', l: 'From', t: 'date', req: 1 },
         { n: 'to', l: 'To', t: 'date', req: 1 },
@@ -190,7 +190,7 @@
     },
     leave: {
       title: 'Leave Record', icon: '🗓️', group: 'Training',
-      help: 'Leave taken. Attendance below the minimum (80%) can affect eligibility for the university exam.',
+      help: 'PGMER-2023: 20 paid casual leaves + 5 paid academic leaves per year, plus one weekly off; maternity/paternity leave as per government rules. Minimum 80% attendance over the course is needed for the exam; leave beyond entitlement extends your tenure.',
       fields: [
         { n: 'from', l: 'From', t: 'date', req: 1 },
         { n: 'to', l: 'To', t: 'date', req: 1 },
@@ -201,7 +201,7 @@
     },
     courses: {
       title: 'Courses & Certifications', icon: '🎓', group: 'Training',
-      help: 'Mandatory and recommended courses (BCBR, BLS/ACLS, ethics, etc.).',
+      help: 'PGMER-2023 makes research methodology, ethics (incl. GCP/GLP), BCLS and ACLS mandatory for exam eligibility.',
       fields: [
         { n: 'course', l: 'Course', t: 'combo', req: 1, src: () => D.MANDATORY_COURSES.map((c) => c.name) },
         { n: 'date', l: 'Date completed', t: 'date' },
@@ -566,20 +566,46 @@
     return `<div class="meter"><div class="meter-top"><span>${esc(label)}</span><b class="${ok === true ? 'okt' : ok === false ? 'badt' : ''}">${got}${target ? ' / ' + target : ''}</b></div>
       <div class="track"><div class="fill ${ok ? 'ok' : ''}" style="width:${pct}%"></div></div>${sub ? `<small>${sub}</small>` : ''}</div>`;
   }
+  function monthlyStats(n) {
+    const out = [];
+    const all = Object.keys(S).flatMap((k) => list(k));
+    const d = new Date();
+    for (let i = 0; i < n; i++) {
+      const m = new Date(d.getFullYear(), d.getMonth() - i, 1);
+      const key = `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, '0')}`;
+      const rows = all.filter((r) => (r.created || '').slice(0, 7) === key);
+      out.push({ key, label: m.toLocaleString('en-IN', { month: 'short', year: 'numeric' }), total: rows.length, ver: rows.filter((r) => r.status === 'Verified').length });
+    }
+    return out;
+  }
+  function monthlyTable() {
+    return `<table class="data compact"><thead><tr><th>Month</th><th>Entries</th><th>Verified</th><th></th></tr></thead><tbody>${monthlyStats(6).map((m) =>
+      `<tr><td>${m.label}</td><td>${m.total}</td><td>${m.ver}</td><td>${!m.total ? '<span class="pill pend">No entries</span>' : m.ver === m.total ? '<span class="pill ok">✓ Authenticated</span>' : '<span class="pill pend">Pending</span>'}</td></tr>`).join('')}</tbody></table>`;
+  }
   function renderDashboard() {
     const p = db.profile;
     const t = db.targets;
     const cnt = (k, fn) => list(k).filter(fn || (() => true)).length;
-    const posters = cnt('presentations', (r) => /poster/i.test(r.type));
-    const orals = cnt('presentations', (r) => r.type === 'Oral paper');
-    const pubs = cnt('publications', (r) => r.status === 'Accepted' || r.status === 'Published');
+    const confLevel = (r) => ['National', 'Zonal', 'State', 'International'].includes(r.level);
+    const posters = cnt('presentations', (r) => /poster/i.test(r.type) && confLevel(r));
+    const orals = cnt('presentations', (r) => /podium|oral/i.test(r.type) && confLevel(r));
+    const pubs = cnt('publications', (r) => (r.status === 'Accepted' || r.status === 'Published') && r.authorship === 'First author');
+    const research = posters + orals + pubs;
+    const yr = p.joinDate ? Math.floor((daysBetween(p.joinDate, today()) - 1) / 365.25) : 0;
+    const yStart = p.joinDate ? addMonths(p.joinDate, yr * 12) : '';
+    const yEnd = p.joinDate ? addMonths(p.joinDate, (yr + 1) * 12) : '';
+    const leaveIn = (type) => list('leave').filter((l) => l.type === type && l.to >= yStart && l.from < yEnd)
+      .reduce((s, l) => s + Math.max(0, daysBetween(l.from < yStart ? yStart : l.from, l.to >= yEnd ? new Date(new Date(yEnd + 'T00:00:00') - 86400000 + 43200000).toISOString().slice(0, 10) : l.to)), 0);
+    const all = Object.keys(S).flatMap((k) => list(k));
+    const stale = all.filter((r) => r.status !== 'Verified' && r.created && (Date.now() - new Date(r.created)) / 86400000 > 31).length;
+    const lastEntry = all.reduce((m, r) => (r.created && r.created > m ? r.created : m), '');
     const drp = list('postings').filter((r) => /DRP/.test(r.type)).reduce((s, r) => s + daysBetween(r.from, r.to), 0);
     const att = attendance();
     const allEntries = Object.keys(S).reduce((s, k) => s + list(k).length, 0);
     const pending = Object.keys(S).reduce((s, k) => s + list(k).filter((r) => r.status !== 'Verified').length, 0);
     const th = db.thesis;
     const thesisSteps = [['Protocol submitted', th.protocolDate], ['IEC approval', th.iecDate], ['University approval', th.univDate], ['Data collection started', th.dataStart], ['Data collection completed', th.dataEnd], ['Thesis submitted', th.submitted], ['Thesis accepted', th.accepted]];
-    const bcbr = list('courses').some((r) => /BCBR|Biomedical Research/i.test(r.course || ''));
+    const missingCourses = D.MANDATORY_COURSES.filter((c) => c.req && !list('courses').some((r) => (r.course || '').toLowerCase() === c.name.toLowerCase()));
     const alerts = [];
     if (!p.name || !p.joinDate || !p.specialty) alerts.push('Complete your <a href="#/profile">profile</a> (name, specialty, joining date).');
     if (p.joinDate) {
@@ -588,9 +614,12 @@
       const sub = addMonths(p.joinDate, t.thesisSubmitMonths);
       if (!th.submitted && today() > addMonths(p.joinDate, t.thesisSubmitMonths - 3)) alerts.push(`Thesis submission due by <b>${fmtDate(sub)}</b>.`);
     }
-    if (!bcbr) alerts.push('Basic Course in Biomedical Research (BCBR) not yet recorded — it is mandatory.');
+    if (missingCourses.length) alerts.push(`Mandatory course(s) not yet recorded: <b>${missingCourses.map((c) => esc(c.name)).join(', ')}</b>. <a href="#/c/courses">Add</a>`);
+    if (p.joinDate && (!lastEntry || (Date.now() - new Date(lastEntry)) / 86400000 > 7)) alerts.push('No logbook entry in the last 7 days — PGMER-2023 expects the e-logbook to be <b>updated weekly</b>.');
+    if (stale) alerts.push(`<b>${stale}</b> entr${stale > 1 ? 'ies are' : 'y is'} more than a month old and still unverified — your guide must <b>authenticate the logbook monthly</b>.`);
+    if (p.joinDate && leaveIn('Casual leave') > t.casualLeave) alerts.push(`Casual leave this year: <b>${leaveIn('Casual leave')}</b> days — exceeds the ${t.casualLeave}-day entitlement (excess extends tenure).`);
+    if (p.joinDate && leaveIn('Academic leave') > t.academicLeave) alerts.push(`Academic leave this year: <b>${leaveIn('Academic leave')}</b> days — exceeds the ${t.academicLeave}-day entitlement.`);
     if (att && att.pct < t.attendancePct) alerts.push(`Attendance is <b>${att.pct.toFixed(1)}%</b> — below the ${t.attendancePct}% minimum.`);
-    if (pending > 20) alerts.push(`${pending} entries await faculty verification.`);
     const lastBackup = db.lastBackup ? fmtDate(db.lastBackup.slice(0, 10)) : 'never';
     if (!db.lastBackup || (Date.now() - new Date(db.lastBackup)) / 86400000 > 14) alerts.push(`Last backup: <b>${lastBackup}</b>. <a href="#/settings">Export a backup</a> — data lives only on this device.`);
 
@@ -614,12 +643,18 @@
       </div>
       <div class="grid2">
         <div class="card"><h3>PGMER-2023 requirements</h3>
-          ${bar('Poster presentations', posters, t.posters)}
-          ${bar('Oral paper presentations', orals, t.orals)}
-          ${bar('Publications (accepted/published)', pubs, t.publications)}
+          ${bar('Research for exam eligibility (any one)', research, t.research, `${posters} poster · ${orals} podium (state/zonal/national) · ${pubs} first-author paper`)}
+          ${t.posters ? bar('Poster presentations', posters, t.posters) : ''}
+          ${t.orals ? bar('Podium presentations', orals, t.orals) : ''}
+          ${t.publications ? bar('Publications (first author)', pubs, t.publications) : ''}
           ${bar('District Residency Programme (days)', drp, t.drpDays, '3 months, usually in the 3rd–5th semester')}
           ${att ? bar('Attendance %', Number(att.pct.toFixed(1)), t.attendancePct, `${att.leaveDays} leave days of ${att.total} days so far`) : '<p class="muted">Add joining date to track attendance.</p>'}
           ${bar('Periodic appraisals', cnt('appraisals'), t.appraisals)}
+          ${p.joinDate ? `<p class="muted">Leave in year ${yr + 1}: casual ${leaveIn('Casual leave')}/${t.casualLeave} · academic ${leaveIn('Academic leave')}/${t.academicLeave}</p>` : ''}
+        </div>
+        <div class="card"><h3>Monthly guide authentication</h3>
+          <p class="help">PGMER-2023: update weekly, guide authenticates monthly.</p>
+          ${monthlyTable()}
         </div>
         <div class="card"><h3>Thesis milestones</h3>
           <ol class="steps">${thesisSteps.map(([l, d]) => `<li class="${d ? 'done' : ''}"><span>${d ? '✓' : ''}</span>${esc(l)}${d ? ` <small>${fmtDate(d)}</small>` : ''}</li>`).join('')}</ol>
@@ -652,9 +687,12 @@
         <div class="form-grid">
           ${num('attendancePct', 'Minimum attendance %')}
           ${num('drpDays', 'DRP duration (days)')}
-          ${num('posters', 'Poster presentations')}
-          ${num('orals', 'Oral paper presentations')}
-          ${num('publications', 'Publications')}
+          ${num('research', 'Research outputs for exam (any of poster / podium / 1st-author paper)', 'PGMER-2023: 1')}
+          ${num('posters', 'Extra target: posters', '0 = no separate target')}
+          ${num('orals', 'Extra target: podium presentations', '0 = no separate target')}
+          ${num('publications', 'Extra target: publications', '0 = no separate target')}
+          ${num('casualLeave', 'Casual leave per year (days)')}
+          ${num('academicLeave', 'Academic leave per year (days)')}
           ${num('appraisals', 'Periodic appraisals')}
           ${num('seminars', 'Seminars to present', '0 = no target')}
           ${num('journalClubs', 'Journal clubs to present', '0 = no target')}
@@ -796,25 +834,26 @@
         <p class="help">Summary of requirements in the NMC <b>Post-Graduate Medical Education Regulations, 2023 (PGMER-2023)</b> and the NMC competency-based PG curriculum guidelines. Always check the latest NMC notifications and your university's regulations — they prevail.</p>
         <h3>Logbook</h3>
         <ul>
-          <li>Every PG student must maintain a logbook (electronic logbook encouraged) recording clinical work, procedures done/assisted, academic activities and presentations.</li>
-          <li>The logbook must be checked and assessed periodically by the faculty, and is a record of the student's training.</li>
+          <li>Every PG student must maintain a <b>dynamic e-logbook</b> recording clinical work, procedures, skills, academic activities, research and assessments.</li>
+          <li>It must be <b>updated weekly</b> by the student and <b>assessed and authenticated monthly by the PG guide</b> (PGMER-2000 left the frequency undefined).</li>
           <li>A satisfactory, certified logbook (by guide and HOD) is required for eligibility to appear in the final university examination.</li>
         </ul>
         <h3>Thesis</h3>
         <ul>
           <li>Thesis is compulsory for MD/MS. Protocol is submitted early in the course (typically within the first 6 months) after Institutional Ethics Committee approval.</li>
-          <li>The accepted thesis is a precondition for appearing in the final exam; submission is usually required ~6 months before the exam.</li>
+          <li>Thesis must be submitted to the university <b>6 months before the final exam</b> and accepted to appear in it. It carries 20 marks, added to the practical/clinical exam.</li>
         </ul>
         <h3>Research output</h3>
         <ul>
-          <li>At least one <b>poster</b> and one <b>oral paper</b> presentation at a conference.</li>
-          <li>At least one <b>research paper</b> published or accepted in an indexed journal.</li>
-          <li>Completion of the <b>Basic Course in Biomedical Research (BCBR)</b>.</li>
+          <li>To be eligible for the final exam, at least <b>ONE</b> of: a <b>poster</b> presentation, or a <b>podium</b> presentation, at a national / zonal / state conference of the specialty; or <b>one research paper published / accepted as first author</b> in a journal of the specialty. (PGMER-2000 required all three.)</li>
+          <li>NMC letter of 5 Aug 2025: the requirement is specialty-based, so presentations at national/state IMA conferences also count.</li>
+          <li>Mandatory courses: <b>online Research Methodology course</b>, <b>Ethics (incl. GCP/GLP)</b>, <b>BCLS</b> and <b>ACLS</b>.</li>
         </ul>
         <h3>District Residency Programme (DRP)</h3>
-        <ul><li>Compulsory 3-month rotation in a district health system / district hospital, typically in the 3rd, 4th or 5th semester. Log it under <a href="#/c/postings">Postings & DRP</a>.</li></ul>
+        <ul><li>Compulsory 3-month rotation in a district health system / district hospital, typically in the 3rd, 4th or 5th semester. Certification of satisfactory completion is needed for the exam; the college reports DRP details to NMC within 1 week. Log it under <a href="#/c/postings">Postings & DRP</a>.</li></ul>
         <h3>Attendance & leave</h3>
-        <ul><li>Minimum 80% attendance in each year is generally required for eligibility to appear in the exam. PG students are full-time residents.</li></ul>
+        <ul><li>Minimum <b>80% attendance</b> (counted over the whole course) for exam eligibility. PG students are full-time residents.</li>
+        <li>Leave: <b>20 paid casual leaves</b> and <b>5 paid academic leaves</b> per year, one weekly off, maternity/paternity leave as per government rules. Leave beyond this extends the course tenure.</li></ul>
         <h3>Assessment</h3>
         <ul>
           <li>Formative assessment throughout the course, including workplace-based assessment (Mini-CEX, DOPS, CbD, 360° feedback) and internal examinations.</li>

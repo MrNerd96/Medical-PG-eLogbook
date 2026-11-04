@@ -125,13 +125,15 @@ window.PGDATA = (function () {
   ];
 
   // Training / courses mentioned by NMC (PGMER-2023 & curriculum guidelines).
+  // PGMER-2023: research methodology, ethics (incl. GCP/GLP) and BCLS + ACLS are required for exam eligibility
+  // (usually completed in the 1st year). The rest are recommended.
   const MANDATORY_COURSES = [
-    { id: 'bcbr', name: 'Basic Course in Biomedical Research (BCBR)', note: 'Mandatory for all PGs; required before submitting thesis / appearing in final exam.' },
-    { id: 'bls', name: 'Basic Life Support (BLS)', note: 'Life-support skills training.' },
-    { id: 'acls', name: 'Advanced Cardiac Life Support (ACLS)', note: 'Life-support skills (as per department).' },
-    { id: 'ethics', name: 'Course in Medical Ethics / Good Clinical Practice', note: 'Ethics & research ethics training.' },
-    { id: 'induction', name: 'Induction / Orientation Programme', note: 'At joining – rules, hospital systems, communication.' },
-    { id: 'ipc', name: 'Infection Prevention & Control / Biomedical Waste', note: 'Hospital infection control training.' },
+    { id: 'bcbr', name: 'Online Course on Research Methodology (NMC BCBR)', req: 1, note: 'Mandatory (PGMER-2023) — required for exam eligibility.' },
+    { id: 'ethics', name: 'Course in Ethics (incl. GCP / GLP)', req: 1, note: 'Mandatory (PGMER-2023) — Good Clinical / Laboratory Practice where relevant.' },
+    { id: 'bcls', name: 'Basic Cardiac Life Support (BCLS)', req: 1, note: 'Mandatory (PGMER-2023) — usually in the 1st year.' },
+    { id: 'acls', name: 'Advanced Cardiac Life Support (ACLS)', req: 1, note: 'Mandatory (PGMER-2023) — usually in the 1st year.' },
+    { id: 'induction', name: 'Induction / Orientation Programme', note: 'Recommended — at joining.' },
+    { id: 'ipc', name: 'Infection Prevention & Control / Biomedical Waste', note: 'Recommended.' },
     { id: 'rdl', name: 'Rational Drug Use / Pharmacovigilance', note: 'Recommended in NMC curricula.' }
   ];
 
@@ -149,9 +151,12 @@ window.PGDATA = (function () {
   const DEFAULT_TARGETS = {
     attendancePct: 80,
     drpDays: 90,
-    posters: 1,
-    orals: 1,
-    publications: 1,
+    research: 1, // PGMER-2023: at least ONE of poster / podium presentation / first-author publication
+    posters: 0,
+    orals: 0,
+    publications: 0,
+    casualLeave: 20,
+    academicLeave: 5,
     seminars: 0,
     journalClubs: 0,
     casePresentations: 0,

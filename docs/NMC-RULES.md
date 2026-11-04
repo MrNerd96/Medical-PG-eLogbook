@@ -11,21 +11,27 @@ NMC issues amendments and advisories, and universities add their own rules.
   These are the source of the student appraisal form and the levels of participation for skills.
 - Sample university PG logbooks built on the NMC format, e.g. Odisha University of Health Sciences:
   <https://ouhs.ac.in/upload/224839%20PG%20LOG%20BOOK%20OUHS%20GEN%20MEDICINE.pdf>
+- Peer-reviewed review of PGMER-2023 (compares it with PGMER-2000): <https://pmc.ncbi.nlm.nih.gov/articles/PMC10947754/>
+- NMC clarification on conference presentations (Aug 2025): <https://medicaldialogues.in/health-news/nmc/research-paper-poster-publication-in-any-national-state-ima-conference-can-be-considered-for-university-exams-nmc-154242>
 - Secondary summary: <https://eportfolios.in/resources/regulatory/pgmer-2023>
+
+> NMC has not prescribed one official e-logbook app or portal. Commercial "NMC eLogbook" products are private
+> vendors, not NMC. A May 2025 draft PGMER amendment (HOD rotation, super-specialty feeder courses) does not
+> change the logbook rules.
 
 ## Requirements and where they live in the app
 
 | Requirement | App section | Default target |
 |---|---|---|
-| Logbook (e-logbook) of clinical work, procedures, academic activities, checked periodically by faculty | Cases, Procedures, Academics + **Verify** | — |
+| **Dynamic e-logbook**, updated **weekly** by the student, **assessed and authenticated monthly by the PG guide** | All sections + **Verify**; dashboard alerts for no entry in 7 days and unverified entries over 1 month old; monthly authentication table | Weekly / monthly |
 | Logbook certified by guide/HOD for exam eligibility | Print Logbook → certificate page | — |
-| Thesis compulsory (MD/MS); protocol with IEC approval early in the course; thesis submitted before the exam | Thesis | Protocol by 6 months, submission by 30 months |
-| At least one poster presentation | Presentations | 1 |
-| At least one oral paper (podium) presentation | Presentations | 1 |
-| At least one research paper published/accepted | Publications | 1 |
-| Basic Course in Biomedical Research (BCBR) | Courses checklist | Required |
-| District Residency Programme: 3 months (3rd–5th semester) | Postings & DRP | 90 days |
-| Minimum attendance (generally 80%) | Leave → Dashboard | 80% |
+| Thesis compulsory (MD/MS), submitted to the university 6 months before the exam; carries 20 marks | Thesis | Protocol by 6 months, submission by 30 months |
+| Research for exam eligibility: **at least ONE** of poster or podium presentation at a national/zonal/state conference of the specialty, or a first-author paper published/accepted in a specialty journal (PGMER-2000 required all three) | Presentations, Publications → Dashboard | 1 (any) |
+| NMC letter of 5 Aug 2025: this goes by specialty, not organisation, so national/state IMA conferences count | Presentations | — |
+| Mandatory courses: online Research Methodology course, Ethics (incl. GCP/GLP), BCLS, ACLS | Courses checklist | Required |
+| District Residency Programme: 3 months (3rd–5th semester); satisfactory completion certificate needed; college reports to NMC within 1 week | Postings & DRP | 90 days |
+| Minimum 80% attendance (cumulative over the course) | Leave → Dashboard | 80% |
+| Leave: 20 paid casual + 5 paid academic per year, weekly off, maternity/paternity per government rules; excess extends tenure | Leave → Dashboard | 20 / 5 |
 | Formative assessment incl. workplace-based assessment | Workplace-Based Assessments | Department-set |
 | Periodic appraisal (NMC Student Appraisal Form, 1–9 scale) | Periodic Appraisal | 6 (one per semester) |
 | Mentor–mentee programme | Mentor Meetings | — |

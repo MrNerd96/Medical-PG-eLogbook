@@ -16,17 +16,18 @@ device. It can be installed to a phone's home screen (PWA) and works without int
 | **Procedures & skills** | Specialty-specific preset list + custom; level of participation **O / A / PS / PI** (observed, assisted, performed under supervision, performed independently); summary table and targets |
 | **Academic activities** | Seminars, journal clubs, case presentations, grand rounds, CPC, M&M meetings, UG teaching, lectures |
 | **Thesis** | Protocol, IEC approval, university approval, CTRI, data collection, submission and acceptance, with due dates calculated from the joining date |
-| **Presentations / Publications / Conferences** | Tracks the PGMER-2023 research requirements (poster, oral paper, publication) and CMEs/workshops |
+| **Presentations / Publications / Conferences** | Tracks the PGMER-2023 research requirement for exam eligibility: at least one of a poster or podium presentation (state/zonal/national) or a first-author paper. Also records CMEs and workshops |
 | **Workplace-based assessments** | Mini-CEX, DOPS, CbD, 360° MSF, OSCE, internal exams, with feedback and action plan |
 | **Periodic appraisal** | The NMC *Student Appraisal Form* (7 elements, each scored 1–9) |
 | **Postings & DRP** | Unit and rotational postings and the mandatory 3-month **District Residency Programme** |
 | **Leave** | Leave record, with attendance % calculated against the 80% minimum |
-| **Courses** | Checklist: BCBR (mandatory), BLS, ACLS, ethics/GCP, induction, IPC/BMW, rational drug use |
+| **Courses** | Mandatory: research methodology (BCBR), ethics (GCP/GLP), BCLS, ACLS. Recommended: induction, IPC/BMW, rational drug use |
 | **Mentor meetings & reflections** | Mentor–mentee meetings and reflective writing |
 
 ### Faculty verification
-PGMER-2023 requires the logbook to be checked periodically by faculty and certified by the guide and HOD before
-the final exam. Every entry is therefore **Pending** until a faculty member verifies it on the student's device
+PGMER-2023 says the e-logbook must be **updated weekly** and **authenticated monthly by the PG guide**. The
+dashboard has a monthly authentication table, and alerts you when there has been no entry for 7 days or when an
+entry has gone unverified for more than a month. Every entry is therefore **Pending** until a faculty member verifies it on the student's device
 (name, date and remarks are recorded). Editing a verified entry resets it to Pending. The **Print Logbook** page
 produces an A4 logbook with a signature column on every row, a cover page and an HOD certificate. You can also
 save it as a PDF.
